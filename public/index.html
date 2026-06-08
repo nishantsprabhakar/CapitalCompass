@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Capital Compass</title>
+  <link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body>
+  <main class="app">
+    <aside class="side">
+      <div class="brand">
+        <img class="brand-logo" src="/assets/logo.svg" alt="Capital Compass logo">
+        <div>
+          <h1>Capital Compass</h1>
+          <p>Inspired by <em>Capital in the Shadows</em> by Nishant Prabhakar</p>
+        </div>
+      </div>
+      <nav>
+        <a href="#inputs" class="active">Inputs</a>
+        <a href="#screen">Initial screen</a>
+        <a href="#deep">Deep dive</a>
+        <a href="#outputs">Outputs</a>
+      </nav>
+      <div class="template" id="templateBox">Loading template...</div>
+      <div class="system-card">
+        <span></span>
+        <strong>Shadow diligence engine</strong>
+        <p>Company-scoped corpus, red flag register, evidence gaps, IC memo, and sponsor model.</p>
+      </div>
+    </aside>
+
+    <section class="workspace">
+      <form id="dealForm" class="panel command-panel" enctype="multipart/form-data">
+        <div class="section-head" id="inputs">
+          <div>
+            <p class="eyebrow">Capital Compass command center</p>
+            <h2>Company materials and research sources</h2>
+          </div>
+          <button class="primary" type="submit">Run diligence</button>
+        </div>
+
+        <div class="grid">
+          <label>Company name
+            <input name="companyName" value="Pixxel" placeholder="Target company">
+          </label>
+          <label>Sector
+            <input name="sector" placeholder="Auto-detect if blank">
+          </label>
+          <label>Geography
+            <input name="geography" placeholder="Auto-detect if blank">
+          </label>
+          <label>Output scope
+            <select name="stage">
+              <option value="full">Initial screen + deep dive outputs</option>
+              <option value="screening">Initial screening only</option>
+              <option value="deepDive">Deep dive outputs</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="input-row">
+          <label class="drop">
+            <span>Upload deck, CIM, notes, financial model, contracts, or other diligence files</span>
+            <input name="files" type="file" multiple webkitdirectory>
+          </label>
+          <label>Or read a local folder path
+            <input name="folderPath" placeholder="C:\path\to\diligence-folder">
+          </label>
+        </div>
+
+        <label>Source URLs for web research
+          <textarea name="sourceUrls" rows="4" placeholder="Paste company website, filings, reputable news, customer references, industry reports, government databases, or analyst sources. One URL per line."></textarea>
+        </label>
+      </form>
+
+      <section class="panel compact intelligence-panel" id="screen">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Investment radar</p>
+            <h2>Investment view</h2>
+          </div>
+          <span class="status" id="runStatus">Ready</span>
+        </div>
+        <div id="summary" class="summary-grid">
+          <div class="metric"><span>Recommendation</span><strong>-</strong></div>
+          <div class="metric"><span>Score</span><strong>-</strong></div>
+          <div class="metric"><span>Documents</span><strong>-</strong></div>
+          <div class="metric"><span>Sources</span><strong>-</strong></div>
+        </div>
+        <div id="thesis" class="text-block muted">Run diligence to generate a PE-style initial note and question bank.</div>
+      </section>
+
+      <section class="panel" id="deep">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Deep dive</p>
+            <h2>IC memo and model preparation map</h2>
+          </div>
+        </div>
+        <div class="workplan">
+          <div><strong>Commercial</strong><span>Customer calls, retention, pricing, cohort analysis, pipeline conversion</span></div>
+          <div><strong>Financial</strong><span>Quality of revenue, EBITDA bridge, working capital, cash conversion, scenario model</span></div>
+          <div><strong>Market</strong><span>TAM/SAM/SOM, growth drivers, competition, regulatory posture, exit buyers</span></div>
+          <div><strong>IC decision</strong><span>Thesis, risks, valuation, returns, mitigants, 100-day value creation plan</span></div>
+        </div>
+      </section>
+
+      <section class="panel" id="outputs">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Downloads</p>
+            <h2>Generated outputs</h2>
+          </div>
+        </div>
+        <div id="downloads" class="downloads">No files generated yet.</div>
+      </section>
+    </section>
+  </main>
+  <script src="/assets/app.js"></script>
+</body>
+</html>

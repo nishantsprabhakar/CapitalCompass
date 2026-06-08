@@ -1,0 +1,10 @@
+node_modules/
+work/uploads/
+work/*.pptx
+work/*.docx
+work/*.xlsx
+work/*.pdf
+outputs/*.docx
+outputs/*.pptx
+outputs/*.xlsx
+work/template-assets/
