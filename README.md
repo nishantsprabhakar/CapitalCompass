@@ -1,6 +1,6 @@
-# Capital Compass
+# CapitalCompass
 
-Capital Compass is a local private-equity diligence workbench inspired by *Capital in the Shadows* by Nishant Prabhakar.
+CapitalCompass is a local private-equity diligence workbench inspired by *Capital in the Shadows* by Nishant Prabhakar.
 
 It ingests company decks, information documents, financial models, and source URLs to produce:
 
