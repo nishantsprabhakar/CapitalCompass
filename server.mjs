@@ -85,13 +85,22 @@ async function handleAnalyze(req, res) {
   const sourceUrls = splitLines(fields.sourceUrls || "");
   const folderPath = fields.folderPath ? String(fields.folderPath).trim() : "";
   const folderFiles = folderPath ? await listReadableFiles(folderPath) : [];
-  const allFiles = [...uploaded, ...folderFiles]
+  const templateUpload = uploaded.find((file) => file.fieldName === "templateFile" && /\.pptx$/i.test(file.name || file.path));
+  const materialUploads = uploaded.filter((file) => file.fieldName !== "templateFile");
+  const selectedTemplatePath = templateUpload?.path || DEFAULT_TEMPLATE;
+  const allFiles = [...materialUploads, ...folderFiles]
     .filter(Boolean)
     .filter((file) => /\.(pptx|docx|xlsx|csv|txt|md)$/i.test(file.name || file.path))
     .slice(0, 140);
   const extracted = await extractCorpus(allFiles);
   const research = await researchUrls(sourceUrls);
-  const template = await inspectTemplate(DEFAULT_TEMPLATE);
+  const template = await inspectTemplate(selectedTemplatePath);
+  if (templateUpload) {
+    template.uploadedName = templateUpload.name;
+    template.source = "uploaded";
+  } else {
+    template.source = "default";
+  }
   const analysis = buildInvestmentAnalysis({ companyName, stage, extracted, research, template, fields });
   const files = [];
 
@@ -144,7 +153,7 @@ async function parseMultipart(buffer, boundary) {
       if (!safeName) continue;
       const filePath = path.join(uploadRoot, safeName);
       await fs.writeFile(filePath, Buffer.from(body, "binary"));
-      files.push({ path: filePath, name: safeName });
+      files.push({ path: filePath, name: safeName, fieldName: name });
     } else {
       fields[name] = Buffer.from(body, "binary").toString("utf8").trim();
     }

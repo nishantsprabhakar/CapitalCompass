@@ -38,6 +38,7 @@ form.addEventListener("submit", async (event) => {
 
 function buildSubmissionBody() {
   const fileInput = form.querySelector('input[type="file"]');
+  const templateInput = form.querySelector('input[name="templateFile"]');
   const folderPath = form.querySelector('input[name="folderPath"]').value.trim();
   const files = [...(fileInput.files || [])];
   const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
@@ -61,6 +62,8 @@ function buildSubmissionBody() {
   for (const file of files) {
     if (/\.(pptx|docx|xlsx|csv|txt|md)$/i.test(file.name)) data.append("files", file, file.webkitRelativePath || file.name);
   }
+  const template = templateInput?.files?.[0];
+  if (template && /\.pptx$/i.test(template.name)) data.append("templateFile", template, template.name);
   return data;
 }
 
@@ -88,6 +91,7 @@ function renderAnalysis(a, files) {
         <div class="doc-control">
           <strong>${included.length} included</strong>
           <span>${excluded.length} excluded as low relevance</span>
+          <span>IC template: ${escapeHtml(a.template.uploadedName || a.template.name || "Default")}</span>
         </div>
         ${excluded.length ? `<details><summary>Show excluded documents</summary><ul class="compact-list">${excluded.slice(0, 20).map((d) => `<li>${escapeHtml(d.name)} <span>score ${d.relevanceScore}</span></li>`).join("")}</ul></details>` : ""}
       </section>
