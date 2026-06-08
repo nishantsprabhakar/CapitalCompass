@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CapitalCompass</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <div class="nav">
+        <img src="../public/logo.svg" alt="CapitalCompass logo">
+        <span>CapitalCompass</span>
+      </div>
+      <div class="hero-grid">
+        <div class="copy">
+          <p class="eyebrow">Inspired by Capital in the Shadows</p>
+          <h1>CapitalCompass</h1>
+          <p class="lead">A risk-first private equity diligence cockpit for screening notes, IC memos, and sponsor-grade financial models.</p>
+          <div class="actions">
+            <a href="https://github.com/nishantsprabhakar/CapitalCompass">View GitHub</a>
+            <a href="#workflow">Workflow</a>
+          </div>
+        </div>
+        <div class="console">
+          <div class="bar"><span></span><span></span><span></span></div>
+          <div class="metric"><small>Recommendation</small><strong>Proceed selectively</strong></div>
+          <div class="risk critical"><b>Critical</b><span>Revenue quality and backlog conversion</span></div>
+          <div class="risk critical"><b>Critical</b><span>Gross margin and EBITDA bridge</span></div>
+          <div class="risk high"><b>High</b><span>Manufacturing, launch, and capex execution</span></div>
+          <div class="download">DOCX screening note • PPTX IC memo • XLSX sponsor model</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="band" id="workflow">
+      <h2>Built for PE evaluation</h2>
+      <div class="cards">
+        <article>
+          <span>01</span>
+          <h3>Initial Screening</h3>
+          <p>Read deal-room materials, isolate relevant company documents, identify evidence gaps, and produce a detailed diligence question bank.</p>
+        </article>
+        <article>
+          <span>02</span>
+          <h3>Deep Dive</h3>
+          <p>Build a risk-first IC memo with red flags, decision gates, source register, template styling, and investment committee narrative.</p>
+        </article>
+        <article>
+          <span>03</span>
+          <h3>Financial Model</h3>
+          <p>Generate a multi-tab sponsor model with revenue build, COGS, opex, capex, working capital, debt, valuation, returns, sensitivities, and checks.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="run">
+      <h2>Run locally</h2>
+      <pre><code>npm start
+http://localhost:4186</code></pre>
+      <p>CapitalCompass is a local app because it processes confidential deal files and generates Office documents on the server side.</p>
+    </section>
+  </main>
+</body>
+</html>
