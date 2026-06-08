@@ -884,7 +884,7 @@ async function serveFile(res, file, download = false) {
   if (!path.resolve(file).startsWith(path.resolve(__dirname)) && !path.resolve(file).startsWith(path.resolve(OUTPUT_DIR))) return res.writeHead(403).end("Forbidden");
   const data = await fs.readFile(file);
   const ext = path.extname(file).toLowerCase();
-  const types = { ".html": "text/html", ".css": "text/css", ".js": "text/javascript", ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document", ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation", ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" };
+  const types = { ".html": "text/html", ".css": "text/css", ".js": "text/javascript", ".svg": "image/svg+xml", ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document", ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation", ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" };
   res.writeHead(200, { "Content-Type": types[ext] || "application/octet-stream", ...(download ? { "Content-Disposition": `attachment; filename="${path.basename(file)}"` } : {}) });
   res.end(data);
 }
