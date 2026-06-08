@@ -8,7 +8,8 @@ const templateBox = document.getElementById("templateBox");
 fetch("/api/template")
   .then((r) => r.json())
   .then((t) => {
-    templateBox.innerHTML = `<strong>Default IC template</strong><br>${t.name}<br>${t.slides || 0} slides detected<br>Palette: ${(t.colors || []).slice(0, 4).map((c) => `<span style="display:inline-block;width:12px;height:12px;background:#${c};border:1px solid rgba(255,255,255,.35);vertical-align:-2px;margin-right:3px"></span>`).join("")}`;
+    templateBox.classList.add("template-hidden");
+    templateBox.textContent = "";
   })
   .catch(() => { templateBox.textContent = "Template metadata unavailable."; });
 
