@@ -27,6 +27,22 @@ http://localhost:4186
 3. Run initial screening or full deep-dive outputs.
 4. Download the generated Word, PowerPoint, and Excel artifacts.
 
+## Commercial Packaging
+
+CapitalCompass is structured for three monetization paths:
+
+- Per-deal pack: screening note, risk register, diligence questions, IC memo draft, and sponsor model.
+- Team license: repeatable local deployment for funds, family offices, search funds, and advisory teams.
+- Private deployment: firm-specific templates, sector playbooks, controlled data handling, and optional human review.
+
+## Security Positioning
+
+CapitalCompass is local-first. It is designed for confidential deal materials that should not be uploaded into a generic hosted AI workspace. Uploaded IC templates are kept separate from company diligence materials and are used only for presentation styling.
+
+## Disclaimer
+
+CapitalCompass provides analytical workpapers and diligence workflow support. It does not provide legal, tax, accounting, or investment advice.
+
 ## Notes
 
 The Pixxel template file is used locally as a style reference when present in `work/`.
