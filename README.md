@@ -50,6 +50,10 @@ CapitalCompass uses the Capital Compass IC Readiness Score v1.0, a rules-based P
 
 The score is intentionally conservative: management claims are not treated as proof unless the materials include source-backed evidence such as customer-level revenue, signed contracts, audited financials, margin bridges, downside cases, market sources, exit comps, or value-creation execution details.
 
+## Strategic Buyer Readiness
+
+CapitalCompass now includes an S&P-style acquisition readiness layer. Each diligence run produces an enterprise readiness score, source-quality score, audit record hash, competitive benchmark against leading market-intelligence and diligence tools, and a downloadable strategic acquisition readiness report. This is intended to surface the product gaps that matter to an enterprise buyer: governance, citations, API readiness, proprietary data moat, workflow depth, security controls, and customer traction.
+
 ## Commercial Packaging
 
 CapitalCompass is structured for three monetization paths:

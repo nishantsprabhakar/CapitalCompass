@@ -4,6 +4,7 @@ const downloads = document.getElementById("downloads");
 const thesis = document.getElementById("thesis");
 const summary = document.getElementById("summary");
 const templateBox = document.getElementById("templateBox");
+const enterpriseReview = document.getElementById("enterpriseReview");
 
 fetch("/api/template")
   .then((r) => r.json())
@@ -20,6 +21,7 @@ form.addEventListener("submit", async (event) => {
   statusEl.textContent = "Running";
   downloads.textContent = "Generating files...";
   thesis.textContent = "Extracting materials, building diligence view, and preparing exports.";
+  enterpriseReview.textContent = "Benchmarking enterprise readiness, source quality, audit trail, and strategic-buyer fit.";
 
   try {
     const body = buildSubmissionBody();
@@ -32,6 +34,7 @@ form.addEventListener("submit", async (event) => {
     statusEl.textContent = "Error";
     thesis.textContent = error.message;
     downloads.textContent = "No files generated.";
+    enterpriseReview.textContent = "Enterprise review unavailable because analysis failed.";
   } finally {
     button.disabled = false;
   }
@@ -75,6 +78,7 @@ function renderAnalysis(a, files) {
     metric("Recommendation", a.recommendation),
     metric("Score", `${a.scorecard.total}/100`),
     metric("Confidence", `${a.scorecard.confidence || 0}%`),
+    metric("Enterprise", `${a.enterpriseReadiness?.score || 0}/100`),
     metric("Docs used", `${included.length}/${a.docsSummary.length}`),
     metric("Sources", String(a.research.length))
   ].join("");
@@ -144,7 +148,79 @@ function renderAnalysis(a, files) {
       </section>
     </div>
   `;
+  renderEnterpriseReview(a);
   downloads.innerHTML = files.map((f) => `<a href="${f.href}">${f.label}</a>`).join("");
+}
+
+function renderEnterpriseReview(a) {
+  const er = a.enterpriseReadiness;
+  const sq = a.sourceQuality;
+  enterpriseReview.innerHTML = `
+    <div class="enterprise-layout">
+      <section class="analysis-card wide readiness-hero">
+        <div>
+          <div class="card-label">Acquisition readiness verdict</div>
+          <h3>${escapeHtml(er.verdict)}</h3>
+          <p>${escapeHtml(er.acquisitionCase)}</p>
+        </div>
+        <div class="readiness-score">
+          <strong>${escapeHtml(er.score)}</strong>
+          <span>/100</span>
+        </div>
+      </section>
+      <section class="analysis-card">
+        <div class="card-label">Source reliability</div>
+        <div class="source-meter">
+          <strong>${escapeHtml(sq.score)}/100</strong>
+          <span>${escapeHtml(sq.verdict)}</span>
+        </div>
+        <ul class="compact-list">
+          <li>${escapeHtml(sq.usableSources)} usable external sources</li>
+          <li>${escapeHtml(sq.authoritativeSources)} authoritative sources</li>
+          <li>${escapeHtml(sq.institutionalSources)} institutional sources</li>
+          <li>${escapeHtml(sq.failedSources)} failed fetches</li>
+        </ul>
+      </section>
+      <section class="analysis-card">
+        <div class="card-label">Audit trail</div>
+        <div class="audit-grid">
+          <span>Session</span><strong>${escapeHtml(a.auditTrail.sessionId)}</strong>
+          <span>Documents</span><strong>${escapeHtml(a.auditTrail.documentsIncluded)}/${escapeHtml(a.auditTrail.documentsReviewed)}</strong>
+          <span>Score version</span><strong>${escapeHtml(a.auditTrail.scoreVersion)}</strong>
+          <span>Record hash</span><strong>${escapeHtml(a.auditTrail.recordHash.slice(0, 16))}...</strong>
+        </div>
+      </section>
+      <section class="analysis-card wide">
+        <div class="card-label">Enterprise readiness scorecard</div>
+        <div class="enterprise-scorecard">
+          ${er.dimensions.map((d) => `
+            <article>
+              <div><strong>${escapeHtml(d.name)}</strong><span>${escapeHtml(d.score)}/100</span></div>
+              <small>${escapeHtml(d.status)} | Weight ${escapeHtml(d.weight)}%</small>
+              <p>${escapeHtml(d.rationale)}</p>
+            </article>
+          `).join("")}
+        </div>
+      </section>
+      <section class="analysis-card wide">
+        <div class="card-label">Benchmark against global platforms</div>
+        <div class="benchmark-grid">
+          ${a.benchmark.map((b) => `
+            <article>
+              <h3>${escapeHtml(b.platform)}</h3>
+              <p><b>Benchmark:</b> ${escapeHtml(b.benchmarkStrength)}</p>
+              <p><b>CapitalCompass:</b> ${escapeHtml(b.capitalCompassPosition)}</p>
+              <span>${escapeHtml(b.acquisitionImplication)}</span>
+            </article>
+          `).join("")}
+        </div>
+      </section>
+      <section class="analysis-card wide">
+        <div class="card-label">Must-fix before USD 100mn strategic process</div>
+        <ul class="clean-list">${er.mustFix.map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ul>
+      </section>
+    </div>
+  `;
 }
 
 function metric(label, value) {

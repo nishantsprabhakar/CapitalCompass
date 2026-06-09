@@ -101,13 +101,16 @@ async function handleAnalyze(req, res) {
   } else {
     template.source = "default";
   }
-  const analysis = buildInvestmentAnalysis({ companyName, stage, extracted, research, template, fields });
+  const analysis = buildInvestmentAnalysis({ companyName, stage, extracted, research, template, fields, sessionId });
   const files = [];
 
   const safe = slug(companyName);
   const notePath = path.join(OUTPUT_DIR, `${safe}-initial-screening-note-${sessionId}.docx`);
+  const acquisitionPath = path.join(OUTPUT_DIR, `${safe}-sp-acquisition-readiness-${sessionId}.docx`);
   await buildScreeningDocx(notePath, analysis);
+  await buildAcquisitionReadinessDocx(acquisitionPath, analysis);
   files.push({ label: "Initial Screening Note and Diligence Questions (.docx)", href: `/download/${path.basename(notePath)}` });
+  files.push({ label: "S&P-Style Acquisition Readiness Review (.docx)", href: `/download/${path.basename(acquisitionPath)}` });
 
   if (stage === "deepDive" || stage === "full") {
     const deckPath = path.join(OUTPUT_DIR, `${safe}-pe-ic-memo-${sessionId}.pptx`);
@@ -256,7 +259,7 @@ async function inspectTemplate(templatePath) {
   };
 }
 
-function buildInvestmentAnalysis({ companyName, stage, extracted, research, template, fields }) {
+function buildInvestmentAnalysis({ companyName, stage, extracted, research, template, fields, sessionId }) {
   const rankedDocs = rankDocuments(companyName, extracted);
   const relevantDocs = rankedDocs.filter((d) => d.relevanceScore >= 3);
   const scopedDocs = relevantDocs.length ? relevantDocs : rankedDocs.slice(0, Math.min(5, rankedDocs.length));
@@ -279,6 +282,10 @@ function buildInvestmentAnalysis({ companyName, stage, extracted, research, temp
   const riskRegister = buildRiskRegister(companyName, sector, corpus, metrics, evidence);
   const questions = diligenceQuestions(companyName, sector, metrics, corpus);
   const scorecard = scoreCompany(corpus, metrics, research, evidence, riskRegister);
+  const sourceQuality = buildSourceQuality(research, docsSummary);
+  const enterpriseReadiness = buildEnterpriseReadiness({ docsSummary, research, sourceQuality, evidence, riskRegister, scorecard, stage });
+  const benchmark = buildCompetitiveBenchmark(enterpriseReadiness, sourceQuality);
+  const auditTrail = buildAuditTrail({ sessionId, companyName, stage, docsSummary, research, sourceQuality, template, scorecard });
   const recommendation = scorecard.recommendation;
   return {
     generatedAt: new Date().toISOString(),
@@ -298,6 +305,10 @@ function buildInvestmentAnalysis({ companyName, stage, extracted, research, temp
     riskRegister,
     questions,
     scorecard,
+    sourceQuality,
+    enterpriseReadiness,
+    benchmark,
+    auditTrail,
     recommendation,
     memoSections: buildMemoSections(companyName, sector, geography, thesis, risks, metrics, scorecard, research, evidence, riskRegister)
   };
@@ -397,6 +408,119 @@ function buildMemoSections(companyName, sector, geography, thesis, risks, metric
   ];
 }
 
+function buildSourceQuality(research, docsSummary) {
+  const classified = research.map((r) => {
+    let hostname = "";
+    try { hostname = new URL(r.url).hostname.replace(/^www\./, "").toLowerCase(); } catch {}
+    const failed = r.title === "Fetch failed" || /fetch failed|timed out|error/i.test(`${r.title} ${r.summary}`);
+    const tier = failed ? "Failed"
+      : /\.(gov|mil)$/i.test(hostname) || /sec\.gov|edgar|companieshouse|bseindia|nseindia|rbi\.org|europa\.eu|worldbank|oecd|imf/i.test(hostname) ? "Authoritative"
+        : /spglobal|capitaliq|pitchbook|alphasense|msci|bain|mckinsey|bcg|deloitte|pwc|kpmg|ey|gartner|forrester|fitch|moodys|reuters|bloomberg|ft\.com|wsj\.com/i.test(hostname) ? "Institutional"
+          : /linkedin|crunchbase|tracxn|owler|cbinsights|company|about|investor/i.test(hostname) ? "Market / company"
+            : "Open web";
+    const score = { Authoritative: 100, Institutional: 86, "Market / company": 68, "Open web": 50, Failed: 0 }[tier];
+    return { title: r.title || r.url, url: r.url, domain: hostname || "unknown", tier, score, summary: r.summary };
+  });
+  const usable = classified.filter((s) => s.tier !== "Failed");
+  const avg = usable.length ? Math.round(usable.reduce((s, x) => s + x.score, 0) / usable.length) : 0;
+  const docCoverage = docsSummary.length ? Math.round(docsSummary.filter((d) => d.status === "included").length / docsSummary.length * 100) : 0;
+  const verdict = avg >= 82 && usable.length >= 4 ? "Institutional-grade triangulation"
+    : avg >= 65 && usable.length >= 2 ? "Usable but needs more authoritative sources"
+      : "Insufficient external validation";
+  return {
+    score: avg,
+    verdict,
+    usableSources: usable.length,
+    failedSources: classified.length - usable.length,
+    authoritativeSources: usable.filter((s) => s.tier === "Authoritative").length,
+    institutionalSources: usable.filter((s) => s.tier === "Institutional").length,
+    documentCoverage: docCoverage,
+    sources: classified
+  };
+}
+
+function buildEnterpriseReadiness({ docsSummary, research, sourceQuality, evidence, riskRegister, scorecard, stage }) {
+  const includedDocs = docsSummary.filter((d) => d.status === "included").length;
+  const dimensions = [
+    readinessDimension("Data-room ingestion coverage", 14, includedDocs >= 25 ? 92 : includedDocs >= 10 ? 76 : includedDocs >= 4 ? 58 : 36, "Multi-format upload/folder ingestion is working; enterprise buyers will expect broader PDF/OCR/email support and permission-aware indexing."),
+    readinessDimension("Source credibility and triangulation", 14, sourceQuality.score, sourceQuality.verdict),
+    readinessDimension("Explainable underwriting intelligence", 16, Math.min(94, scorecard.confidence + 35), "Proprietary score has pillars, subfactors, penalties, gates, and confidence; next step is cited evidence at paragraph level."),
+    readinessDimension("Workflow and Office-native outputs", 12, stage === "full" || stage === "deepDive" ? 88 : 72, "DOCX, PPTX, and XLSX outputs align with sponsor workflows and can fit advisory/Capital IQ Pro adjacency."),
+    readinessDimension("Risk, governance, and auditability", 14, riskRegister.length >= 7 ? 72 : 55, "Risk register and audit trail exist; acquisition-grade product still needs role permissions, immutable event logging, retention policy, and admin controls."),
+    readinessDimension("Platform extensibility / API readiness", 12, 54, "Current app is local-first Node with structured JSON internally; needs authenticated APIs, connectors, SDK, queueing, and multi-tenant architecture."),
+    readinessDimension("Data moat and benchmark defensibility", 18, research.length >= 5 ? 58 : 38, "The algorithm is proprietary, but a USD 100mn acquisition case requires proprietary datasets, benchmarks, usage telemetry, or exclusive source partnerships.")
+  ];
+  const total = Math.round(dimensions.reduce((s, d) => s + d.score * d.weight / 100, 0));
+  const blockerCount = dimensions.filter((d) => d.score < 60).length + evidence.missingEvidence.length + scorecard.gates.length;
+  const verdict = total >= 82 ? "Strategic acquisition-ready"
+    : total >= 68 ? "Strategic pilot-ready, not yet acquisition-ready"
+      : total >= 52 ? "Promising product asset; enterprise gaps remain"
+        : "Prototype with acquisition blockers";
+  const acquisitionCase = total >= 75 && sourceQuality.score >= 70
+    ? "Can support a strategic partnership or tuck-in acquisition discussion if enterprise controls and data moat are completed."
+    : "Not yet defensible as a USD 100mn acquisition target without enterprise security, proprietary data assets, customer traction, AI/search depth, and integration APIs.";
+  return {
+    score: total,
+    verdict,
+    acquisitionCase,
+    blockerCount,
+    dimensions,
+    mustFix: [
+      "Add authenticated multi-user workspace, RBAC, immutable audit logs, encryption-at-rest, retention policies, and admin console.",
+      "Add PDF/OCR/email/VDR ingestion, semantic search, paragraph-level citations, and source-linked answers.",
+      "Build proprietary benchmark datasets: deal comps, sector KPIs, valuation multiples, diligence findings, IC outcomes, and model assumptions.",
+      "Expose secure APIs and connectors for Capital IQ Pro, Excel add-ins, VDRs, CRM, SharePoint/OneDrive, and portfolio-monitoring systems.",
+      "Add AI governance: model registry, prompt/version control, evaluation harness, human-review workflow, and hallucination/citation checks.",
+      "Prove commercial traction: paying funds/advisors, repeat usage, retention, reference customers, and quantified time-saved ROI."
+    ]
+  };
+}
+
+function readinessDimension(name, weight, score, rationale) {
+  const status = score >= 82 ? "Strategic strength" : score >= 68 ? "Competitive" : score >= 52 ? "Needs hardening" : "Acquisition blocker";
+  return { name, weight, score: Math.max(0, Math.min(100, Math.round(score))), status, rationale };
+}
+
+function buildCompetitiveBenchmark(enterpriseReadiness, sourceQuality) {
+  return [
+    benchmarkRow("S&P Capital IQ Pro / Market Intelligence", "Integrated public/private data, risk analytics, valuations, portfolio workflows, private markets intelligence.", "CapitalCompass is differentiated in local-first IC artifact generation, but lacks proprietary data network, APIs, portfolio analytics, and enterprise governance.", enterpriseReadiness.score >= 72 ? "Partner / tuck-in candidate" : "Early product adjacency"),
+    benchmarkRow("PitchBook", "Private-market company/deal/fund data, predictive tools, CRM/API/feed integrations, Excel workflows.", "CapitalCompass has workflow output depth but lacks scaled private-market database, verified contacts, deal history, and benchmarking data.", "Needs data moat"),
+    benchmarkRow("AlphaSense", "Premium content library, AI search/summaries, expert transcripts, filings, research, private cloud options.", "CapitalCompass needs premium content connectors, semantic search, answer citations, and secure AI deployment patterns.", "Needs AI/content layer"),
+    benchmarkRow("Datasite / VDR intelligence", "Secure data-room analytics, semantic search, AI summaries, Q&A, redaction, permissions, ISO-grade governance.", "CapitalCompass handles local files but needs role permissions, VDR connectors, redaction, OCR, audit logs, and deal-room analytics.", "Needs governance hardening"),
+    benchmarkRow("MSCI Private Assets Diligence", "AI-powered structured diligence workflows across investment, operational, and legal review.", "CapitalCompass scoring maps well to structured diligence but requires cited evidence extraction and institutional frameworks by asset class.", "Framework is promising")
+  ].map((row) => ({ ...row, sourceQuality: sourceQuality.verdict }));
+}
+
+function benchmarkRow(platform, benchmarkStrength, capitalCompassPosition, acquisitionImplication) {
+  return { platform, benchmarkStrength, capitalCompassPosition, acquisitionImplication };
+}
+
+function buildAuditTrail({ sessionId, companyName, stage, docsSummary, research, sourceQuality, template, scorecard }) {
+  return {
+    sessionId,
+    generatedAt: new Date().toISOString(),
+    companyName,
+    stage,
+    documentsReviewed: docsSummary.length,
+    documentsIncluded: docsSummary.filter((d) => d.status === "included").length,
+    documentsExcluded: docsSummary.filter((d) => d.status === "excluded").length,
+    sourceUrlsProvided: research.length,
+    sourceQualityScore: sourceQuality.score,
+    templateSource: template.source || "default",
+    scoreVersion: "Capital Compass IC Readiness Score v1.0",
+    riskAdjustedScore: scorecard.total,
+    evidenceConfidence: scorecard.confidence,
+    recordHash: crypto.createHash("sha256").update(JSON.stringify({
+      sessionId,
+      companyName,
+      stage,
+      docs: docsSummary.map((d) => [d.name, d.type, d.chars, d.status]),
+      sources: research.map((r) => r.url),
+      score: scorecard.total
+    })).digest("hex")
+  };
+}
+
 async function buildScreeningDocx(outPath, a) {
   const rows = [
     ["Recommendation", a.recommendation],
@@ -452,6 +576,80 @@ async function buildScreeningDocx(outPath, a) {
         ...a.questions.flatMap((s) => [subheading(s.title), ...s.items.map((q) => bullet(q))]),
         heading("7. Source Research Captured"),
         ...(a.research.length ? a.research.map((r) => bullet(`${r.title || r.url}: ${r.summary}`)) : [bullet("No source URLs supplied yet.")])
+      ]
+    }]
+  });
+  await Packer.toBuffer(doc).then((b) => fs.writeFile(outPath, b));
+}
+
+async function buildAcquisitionReadinessDocx(outPath, a) {
+  const er = a.enterpriseReadiness;
+  const doc = new Document({
+    sections: [{
+      properties: { page: { margin: { top: 720, right: 720, bottom: 720, left: 720 } } },
+      children: [
+        para("CapitalCompass", 30, true, "17365D"),
+        para("S&P-Style Strategic Acquisition Readiness Review", 16, false, "AF803E"),
+        para(`Target diligence run: ${a.companyName} | Generated ${new Date(a.generatedAt).toLocaleString()}`, 9, false, "777777"),
+        table([
+          ["Reviewer lens", "Expert reviewer for S&P Global assessing strategic acquisition readiness"],
+          ["Enterprise readiness score", `${er.score}/100`],
+          ["Verdict", er.verdict],
+          ["USD 100mn acquisition case", er.acquisitionCase],
+          ["Primary blocker count", String(er.blockerCount)],
+          ["Audit record hash", a.auditTrail.recordHash]
+        ]),
+        heading("1. Executive Acquisition View"),
+        para("CapitalCompass has a credible wedge: it converts private-company diligence rooms into IC-ready Word, PowerPoint, and Excel workpapers with a transparent, risk-led underwriting score. That is strategically adjacent to market intelligence, private markets data, valuations, risk analytics, and workflow products."),
+        para("The current product is not yet a defensible USD 100mn acquisition target on product quality alone. The required step-change is enterprise hardening plus a proprietary data moat: secure multi-user workspaces, source-linked AI answers, semantic search, VDR/Capital IQ/Excel integrations, proprietary benchmark datasets, usage telemetry, and evidence of paying institutional customers."),
+        heading("2. Benchmark Against Global Platforms"),
+        table([["Platform", "Benchmark strength", "CapitalCompass position", "Acquisition implication"], ...a.benchmark.map((b) => [b.platform, b.benchmarkStrength, b.capitalCompassPosition, b.acquisitionImplication])]),
+        heading("3. Enterprise Readiness Scorecard"),
+        table([["Dimension", "Weight", "Score", "Status", "Reviewer rationale"], ...er.dimensions.map((d) => [d.name, `${d.weight}%`, `${d.score}/100`, d.status, d.rationale])]),
+        heading("4. Source Quality and Research Reliability"),
+        table([
+          ["Metric", "Value"],
+          ["Source quality score", `${a.sourceQuality.score}/100`],
+          ["Verdict", a.sourceQuality.verdict],
+          ["Usable sources", String(a.sourceQuality.usableSources)],
+          ["Authoritative sources", String(a.sourceQuality.authoritativeSources)],
+          ["Institutional sources", String(a.sourceQuality.institutionalSources)],
+          ["Failed sources", String(a.sourceQuality.failedSources)]
+        ]),
+        ...(a.sourceQuality.sources.length ? [
+          subheading("Source Register"),
+          table([["Tier", "Domain", "Title / source", "Score"], ...a.sourceQuality.sources.slice(0, 12).map((s) => [s.tier, s.domain, s.title, `${s.score}/100`])])
+        ] : [para("No external sources were supplied in this run. This is a material acquisition-readiness weakness because market-intelligence buyers expect source provenance, citations, and triangulation.")]),
+        heading("5. Required Product Changes Before Strategic Acquisition"),
+        ...er.mustFix.map((x) => bullet(x)),
+        heading("6. S&P Integration Hypothesis"),
+        table([
+          ["Integration area", "Rationale", "Build requirement"],
+          ["Capital IQ Pro adjacency", "Convert private deal rooms into structured diligence intelligence and IC artifacts.", "Authenticated APIs, source citations, company identifiers, Excel add-in interoperability."],
+          ["Private markets data enrichment", "Use S&P datasets to benchmark valuation, sector KPIs, transactions, credit risk, and ownership networks.", "Entity matching, data licensing layer, benchmark retrieval, auditability."],
+          ["Risk and compliance products", "Extend KY3P / risk workflow logic into PE diligence and portfolio-company review.", "Controls library, vendor risk, ESG, cyber, regulatory, sanctions, audit evidence."],
+          ["Valuations and analytics", "Feed diligence findings into valuation support, scenario analysis, and return sensitivities.", "Model output linkage, comps integration, audit-ready assumptions register."],
+          ["AI partner strategy", "Position as a secure diligence intelligence workflow rather than a generic chatbot.", "Model governance, prompt/version registry, human review, hallucination tests, private deployment."]
+        ]),
+        heading("7. 100-Day Value Creation Roadmap"),
+        table([
+          ["Period", "Product milestone", "Commercial milestone"],
+          ["Days 0-30", "Ship authentication, workspace model, immutable audit log, PDF/OCR ingestion, and source-linked evidence snippets.", "Convert 3-5 friendly funds/advisors into pilots with measured time-saved ROI."],
+          ["Days 31-60", "Add semantic search, Q&A over documents, VDR/SharePoint connectors, and firm template governance.", "Package enterprise pilot pricing, security memo, and implementation playbook."],
+          ["Days 61-100", "Add benchmark datasets, Capital IQ-style entity matching, valuation comps hooks, and model score feedback loop.", "Build acquisition data room: ARR/pipeline, retention, customer references, security evidence, and roadmap."],
+          ["Months 4-12", "Build sector playbooks, AI governance, admin console, API/SDK, and portfolio-monitoring view.", "Target institutional PE/advisory customers and strategic partnership conversations."]
+        ]),
+        heading("8. Final Reviewer Conclusion"),
+        para(`${er.verdict}. The strongest strategic story is not that CapitalCompass replaces S&P Global, PitchBook, AlphaSense, Datasite, or MSCI. The stronger story is that it can become a diligence intelligence layer that turns proprietary and third-party data into auditable IC outputs. To support a USD 100mn outcome, CapitalCompass must prove enterprise-grade security, proprietary data accumulation, repeatable institutional usage, and integration leverage.`),
+        heading("9. References Used for Benchmarking"),
+        ...[
+          "S&P Global Market Intelligence Private Markets: https://www.spglobal.com/market-intelligence/en/solutions/private-markets",
+          "S&P Global Market Intelligence platform: https://www.spglobal.com/market-intelligence/en",
+          "PitchBook products: https://pitchbook.com/products",
+          "AlphaSense due diligence platform: https://www.alpha-sense.com/solutions/due-diligence-platform/",
+          "Datasite Diligence: https://www.datasite.com/en/products/diligence",
+          "MSCI Private Assets Diligence Platform: https://www.msci.com/data-and-analytics/private-asset-solutions/private-assets-diligence-platform"
+        ].map((x) => bullet(x))
       ]
     }]
   });
