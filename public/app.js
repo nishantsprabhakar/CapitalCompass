@@ -80,7 +80,8 @@ function renderAnalysis(a, files) {
     metric("Recommendation", a.recommendation),
     metric("Score", `${a.scorecard.total}/100`),
     metric("Confidence", `${a.scorecard.confidence || 0}%`),
-    metric("Enterprise", `${a.enterpriseReadiness?.score || 0}/100`),
+    metric("Platform", `${a.enterpriseReadiness?.score || 0}/100`),
+    metric("Deal evidence", `${a.enterpriseReadiness?.dealEvidenceQuality || 0}/100`),
     metric("Docs used", `${included.length}/${a.docsSummary.length}`),
     metric("Sources", String(a.research.length))
   ].join("");
@@ -170,6 +171,14 @@ function renderEnterpriseReview(a) {
           <span>/100</span>
         </div>
       </section>
+      <section class="analysis-card wide">
+        <div class="card-label">Score separation</div>
+        <div class="separation-grid">
+          <article><span>Platform architecture</span><strong>${escapeHtml(er.score)}/100</strong><p>Product capability score for acquisition-readiness architecture.</p></article>
+          <article><span>Deal evidence quality</span><strong>${escapeHtml(er.dealEvidenceQuality)}/100</strong><p>Quality of this specific uploaded target-company evidence package.</p></article>
+          <article><span>Commercial proof</span><strong>External</strong><p>Revenue, traction, retention, references, and valuation must be proven outside a local code build.</p></article>
+        </div>
+      </section>
       <section class="analysis-card">
         <div class="card-label">Source reliability</div>
         <div class="source-meter">
@@ -218,8 +227,12 @@ function renderEnterpriseReview(a) {
         </div>
       </section>
       <section class="analysis-card wide">
-        <div class="card-label">Must-fix before USD 100mn strategic process</div>
+        <div class="card-label">External diligence still required for USD 100mn strategic process</div>
         <ul class="clean-list">${er.mustFix.map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ul>
+      </section>
+      <section class="analysis-card wide">
+        <div class="card-label">Completed platform controls</div>
+        <ul class="clean-list">${(er.completedControls || []).map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ul>
       </section>
     </div>
   `;

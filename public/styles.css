@@ -779,6 +779,35 @@ details summary {
   font-size: 13px;
   font-weight: 800;
 }
+.separation-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.separation-grid article {
+  border: 1px solid #cbd9ea;
+  border-radius: 8px;
+  padding: 14px;
+  background: linear-gradient(180deg, #ffffff, #f6faff);
+  display: grid;
+  gap: 7px;
+}
+.separation-grid span {
+  color: #94650f;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  font-size: 10px;
+  font-weight: 900;
+}
+.separation-grid strong {
+  color: var(--navy);
+  font-size: 24px;
+}
+.separation-grid p {
+  color: #475467;
+  font-size: 12.5px;
+  line-height: 1.42;
+}
 .audit-grid {
   display: grid;
   grid-template-columns: 92px minmax(0, 1fr);
@@ -897,7 +926,7 @@ details summary {
 @media (max-width: 980px) {
   .app { grid-template-columns: 1fr; }
   .side { position: static; height: auto; }
-  .grid, .input-row, .template-upload, .summary-grid, .workplan, .analysis-layout, .enterprise-layout, .enterprise-scorecard, .benchmark-grid, .question-grid, .score-grid, .product-hero, .trust-strip, .plan-grid, .readiness-hero { grid-template-columns: 1fr; }
+  .grid, .input-row, .template-upload, .summary-grid, .workplan, .analysis-layout, .enterprise-layout, .enterprise-scorecard, .benchmark-grid, .separation-grid, .question-grid, .score-grid, .product-hero, .trust-strip, .plan-grid, .readiness-hero { grid-template-columns: 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {

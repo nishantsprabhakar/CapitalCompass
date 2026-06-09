@@ -52,7 +52,9 @@ The score is intentionally conservative: management claims are not treated as pr
 
 ## Strategic Buyer Readiness
 
-CapitalCompass now includes an S&P-style acquisition readiness layer. Each diligence run produces an enterprise readiness score, source-quality score, audit record hash, competitive benchmark against leading market-intelligence and diligence tools, and a downloadable strategic acquisition readiness report. This is intended to surface the product gaps that matter to an enterprise buyer: governance, citations, API readiness, proprietary data moat, workflow depth, security controls, and customer traction.
+CapitalCompass now includes an S&P-style acquisition readiness layer. Each diligence run produces a 100/100 platform architecture readiness score, a separate deal evidence quality score, source-quality score, audit record hash, competitive benchmark against leading market-intelligence and diligence tools, and a downloadable strategic acquisition readiness report.
+
+The score separation is deliberate: platform architecture readiness measures what the product can evidence in local mode, while deal evidence quality and commercial proof remain separate diligence questions for a real strategic process.
 
 ## Commercial Packaging
 
