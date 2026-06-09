@@ -113,6 +113,7 @@
               <select name="aiProvider">
                 <option value="">Disabled</option>
                 <option value="openai-compatible">OpenAI-compatible</option>
+                <option value="groq">Groq</option>
                 <option value="anthropic">Anthropic</option>
                 <option value="gemini">Gemini</option>
                 <option value="custom">Custom JSON API</option>
@@ -122,7 +123,7 @@
               <input name="aiEndpoint" placeholder="https://api.openai.com/v1/chat/completions">
             </label>
             <label>Model
-              <input name="aiModel" placeholder="gpt-4.1, claude-sonnet-4, gemini-1.5-pro, etc.">
+              <input name="aiModel" placeholder="gpt-4.1, llama-3.3-70b-versatile, claude-sonnet-4, gemini-1.5-pro, etc.">
             </label>
             <label>API key
               <input name="aiApiKey" type="password" autocomplete="off" placeholder="Used for this run only">

@@ -208,7 +208,7 @@ async function callAiProvider({ provider, endpoint, model, apiKey, prompt }) {
     });
     return json.candidates?.[0]?.content?.parts?.map((p) => p.text).join("\n") || JSON.stringify(json).slice(0, 4000);
   }
-  const url = endpoint || "https://api.openai.com/v1/chat/completions";
+  const url = endpoint || (provider === "groq" ? "https://api.groq.com/openai/v1/chat/completions" : "https://api.openai.com/v1/chat/completions");
   const json = await postJson(url, {
     authorization: `Bearer ${apiKey}`,
     "content-type": "application/json"
@@ -1012,7 +1012,7 @@ function addAiReviewDeck(pptx, C, a) {
   card(s, C, 9.0, 1.18, 2.85, 1.0, "Data handling", "Key not stored", C.gold);
   s.addShape(pptx.ShapeType.rect, { x: 0.65, y: 2.7, w: 11.75, h: 3.55, fill: { color: ai.status === "complete" ? "F6FAFF" : "FFF8EE" }, line: { color: ai.status === "complete" ? "DCE8F6" : "EAD7B6" } });
   s.addText(ai.status === "complete" ? "AI-generated PE review" : "AI layer status", { x: 0.95, y: 3.02, w: 3.2, h: 0.2, fontSize: 12, bold: true, color: C.midnight, margin: 0 });
-  s.addText(ai.summary || "No AI API review was generated. Add any OpenAI-compatible, Anthropic, Gemini, or custom JSON API endpoint, model, and API key in Deal Setup.", { x: 0.95, y: 3.45, w: 10.85, h: 2.15, fontSize: 10, color: C.ink, fit: "shrink", margin: 0.04 });
+  s.addText(ai.summary || "No AI API review was generated. Add any OpenAI-compatible, Groq, Anthropic, Gemini, or custom JSON API endpoint, model, and API key in Deal Setup.", { x: 0.95, y: 3.45, w: 10.85, h: 2.15, fontSize: 10, color: C.ink, fit: "shrink", margin: 0.04 });
   s.addText("CapitalCompass deterministic scoring, evidence gaps, and document outputs still run without an AI API. AI output is supplementary and should be reviewed by the deal team.", { x: 0.65, y: 6.42, w: 11.25, h: 0.25, fontSize: 8.6, bold: true, color: C.goldDark, margin: 0 });
 }
 
