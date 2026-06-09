@@ -90,6 +90,7 @@ async function handleAnalyze(req, res) {
   const selectedTemplatePath = templateUpload?.path || DEFAULT_TEMPLATE;
   const allFiles = [...materialUploads, ...folderFiles]
     .filter(Boolean)
+    .filter((file) => !isTemplateMaterial(file, selectedTemplatePath, templateUpload))
     .filter((file) => /\.(pptx|docx|xlsx|csv|txt|md)$/i.test(file.name || file.path))
     .slice(0, 140);
   const extracted = await extractCorpus(allFiles);
@@ -162,6 +163,19 @@ async function parseMultipart(buffer, boundary) {
     }
   }
   return { fields, files };
+}
+
+function isTemplateMaterial(file, selectedTemplatePath, templateUpload) {
+  const filePath = file.path ? path.resolve(file.path) : "";
+  const selectedPath = selectedTemplatePath ? path.resolve(selectedTemplatePath) : "";
+  const defaultPath = path.resolve(DEFAULT_TEMPLATE);
+  const name = String(file.name || file.path || "").toLowerCase();
+  if (file.fieldName === "templateFile") return true;
+  if (filePath && (filePath === selectedPath || filePath === defaultPath)) return true;
+  if (templateUpload?.name && name === String(templateUpload.name).toLowerCase()) return true;
+  if (/\b(template|ic template|format|sample deck|reference deck)\b/i.test(name)) return true;
+  if (/pixxel analysis_working/i.test(name)) return true;
+  return false;
 }
 
 async function listReadableFiles(folderPath) {
@@ -245,18 +259,22 @@ async function extractXlsxText(buf) {
 
 async function inspectTemplate(templatePath) {
   if (!fssync.existsSync(templatePath)) return { available: false, name: "No template loaded", colors: ["17365D", "B48A2C", "F3F5F7", "2F3A45"], slides: 0 };
-  const buf = await fs.readFile(templatePath);
-  const zip = await JSZip.loadAsync(buf);
-  const slideCount = Object.keys(zip.files).filter((n) => /^ppt\/slides\/slide\d+\.xml$/.test(n)).length;
-  const themeXml = zip.file("ppt/theme/theme1.xml") ? await zip.file("ppt/theme/theme1.xml").async("text") : "";
-  const colors = [...themeXml.matchAll(/<a:srgbClr val="([0-9A-Fa-f]{6})"/g)].map((m) => m[1].toUpperCase());
-  return {
-    available: true,
-    name: path.basename(templatePath),
-    slides: slideCount,
-    colors: [...new Set(colors)].slice(0, 8),
-    defaultPath: templatePath
-  };
+  try {
+    const buf = await fs.readFile(templatePath);
+    const zip = await JSZip.loadAsync(buf);
+    const slideCount = Object.keys(zip.files).filter((n) => /^ppt\/slides\/slide\d+\.xml$/.test(n)).length;
+    const themeXml = zip.file("ppt/theme/theme1.xml") ? await zip.file("ppt/theme/theme1.xml").async("text") : "";
+    const colors = [...themeXml.matchAll(/<a:srgbClr val="([0-9A-Fa-f]{6})"/g)].map((m) => m[1].toUpperCase());
+    return {
+      available: true,
+      name: path.basename(templatePath),
+      slides: slideCount,
+      colors: [...new Set(colors)].slice(0, 8),
+      defaultPath: templatePath
+    };
+  } catch (error) {
+    return { available: false, name: "Template unreadable; using CapitalCompass PE style", colors: ["17365D", "CD9649", "F3F6FA", "071A33"], slides: 0, defaultPath: "" };
+  }
 }
 
 function buildInvestmentAnalysis({ companyName, stage, extracted, research, template, fields, sessionId }) {
@@ -670,10 +688,13 @@ async function buildIcDeck(outPath, a, template) {
   };
   const assets = await getTemplateAssets(template.defaultPath);
   const C = {
-    navy: "1F497D",
+    midnight: "071A33",
+    navy: "17365D",
     gold: "CD9649",
     goldDark: "AF803E",
+    cyan: "3FD7FF",
     pale: "F8F7F1",
+    cloud: "F3F6FA",
     ink: "263238",
     grey: "6B7280",
     red: "A33A3A",
@@ -683,13 +704,17 @@ async function buildIcDeck(outPath, a, template) {
   slideTitle(pptx, C, a.companyName, "Capital Compass IC Memorandum", [
     `Recommendation: ${a.recommendation}`,
     `Score: ${a.scorecard.total}/100`,
+    `Source quality: ${a.sourceQuality?.score ?? 0}/100`,
     `Template reference: ${template.name || "custom"}`
   ]);
   addAgenda(pptx, C);
   addExecSummary(pptx, C, a);
+  addInvestmentSnapshot(pptx, C, a);
+  addResearchEvidenceDeck(pptx, C, a);
   addRiskRegisterDeck(pptx, C, a);
   addEvidenceGapDeck(pptx, C, a);
   addScorecard(pptx, C, a);
+  addEnterpriseBenchmarkDeck(pptx, C, a);
   for (const section of a.memoSections.slice(1, 7)) addTextSlide(pptx, C, section.title, section.body, section.bullets);
   addQuestionsSlide(pptx, C, a);
   addModelSlide(pptx, C, a);
@@ -700,35 +725,38 @@ async function buildIcDeck(outPath, a, template) {
 function slideBase(pptx, C, title) {
   const s = pptx.addSlide();
   s.background = { color: "FFFFFF" };
-  s.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 0.1, h: 7.5, fill: { color: C.gold }, line: { color: C.gold } });
-  s.addShape(pptx.ShapeType.rect, { x: 0.35, y: 0.88, w: 8.95, h: 0.03, fill: { color: C.gold }, line: { color: C.gold } });
-  for (let i = 0; i < 10; i++) {
-    s.addShape(pptx.ShapeType.ellipse, { x: 0.65 + i * 1.08, y: 0.28 + (i % 3) * 0.08, w: 0.04, h: 0.04, fill: { color: C.gold }, line: { color: C.gold } });
-  }
-  s.addText(title, { x: 0.45, y: 0.42, w: 9.0, h: 0.34, fontFace: "Calibri", fontSize: 18, bold: true, color: C.goldDark, margin: 0 });
-  s.addText("Capital Compass IC Analysis", { x: 10.1, y: 0.47, w: 2.5, h: 0.22, fontSize: 7.5, color: C.gold, align: "right", margin: 0 });
-  s.addText("Capital in the Shadows | Nishant Prabhakar", { x: 9.4, y: 6.95, w: 3.2, h: 0.18, fontSize: 6.8, color: "9A9A9A", align: "right", margin: 0 });
+  s.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 13.33, h: 0.42, fill: { color: C.midnight }, line: { color: C.midnight } });
+  s.addShape(pptx.ShapeType.rect, { x: 0, y: 0.42, w: 0.12, h: 7.08, fill: { color: C.gold }, line: { color: C.gold } });
+  s.addShape(pptx.ShapeType.rect, { x: 0.55, y: 0.92, w: 11.95, h: 0.02, fill: { color: "D9DEE7" }, line: { color: "D9DEE7" } });
+  s.addText("CAPITAL COMPASS | PRIVATE EQUITY IC MEMO", { x: 0.55, y: 0.13, w: 6.8, h: 0.13, fontSize: 6.8, bold: true, color: "DDE8F6", charSpace: 0.8, margin: 0 });
+  s.addText(title, { x: 0.55, y: 0.56, w: 9.15, h: 0.28, fontFace: "Calibri", fontSize: 17.5, bold: true, color: C.midnight, margin: 0 });
+  s.addText("Risk-led | Source-backed | IC-ready", { x: 9.78, y: 0.59, w: 2.75, h: 0.18, fontSize: 7.8, color: C.grey, align: "right", margin: 0 });
+  s.addShape(pptx.ShapeType.rect, { x: 0.55, y: 6.88, w: 11.95, h: 0.01, fill: { color: "E4E8EF" }, line: { color: "E4E8EF" } });
+  s.addText("Generated by CapitalCompass", { x: 0.55, y: 6.98, w: 2.6, h: 0.12, fontSize: 6.4, color: "8C96A5", margin: 0 });
+  s.addText("Confidential diligence workpaper", { x: 9.65, y: 6.98, w: 2.85, h: 0.12, fontSize: 6.4, color: "8C96A5", align: "right", margin: 0 });
   return s;
 }
 
 function slideTitle(pptx, C, title, subtitle, bullets) {
   const s = pptx.addSlide();
-  s.background = { color: "FFFFFF" };
-  s.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 0.1, h: 7.5, fill: { color: C.gold }, line: { color: C.gold } });
+  s.background = { color: C.midnight };
   if (C.asset) {
-    s.addImage({ path: C.asset, x: 8.15, y: 0, w: 5.2, h: 7.5, transparency: 8 });
-    s.addShape(pptx.ShapeType.rect, { x: 8.15, y: 0, w: 5.2, h: 7.5, fill: { color: "FFFFFF", transparency: 18 }, line: { color: "FFFFFF", transparency: 100 } });
+    s.addImage({ path: C.asset, x: 8.35, y: 0, w: 5.05, h: 7.5, transparency: 16 });
+    s.addShape(pptx.ShapeType.rect, { x: 8.35, y: 0, w: 5.05, h: 7.5, fill: { color: C.midnight, transparency: 24 }, line: { color: C.midnight, transparency: 100 } });
   }
-  for (let i = 0; i < 14; i++) s.addShape(pptx.ShapeType.ellipse, { x: 0.72 + i * 0.82, y: 0.36 + (i % 4) * 0.16, w: 0.04, h: 0.04, fill: { color: C.gold }, line: { color: C.gold } });
-  s.addText("CAPITAL COMPASS | INVESTMENT COMMITTEE ANALYSIS", { x: 0.5, y: 1.1, w: 6.5, h: 0.25, fontSize: 13, color: C.gold, margin: 0 });
-  s.addShape(pptx.ShapeType.line, { x: 0.5, y: 1.68, w: 6.6, h: 0, line: { color: C.gold, width: 1.8 } });
-  s.addText(title, { x: 0.5, y: 1.78, w: 7.2, h: 0.9, fontFace: "Calibri", fontSize: 34, bold: true, color: C.goldDark, margin: 0 });
-  s.addText(subtitle, { x: 0.52, y: 2.86, w: 6.6, h: 0.35, fontSize: 18, color: C.gold, margin: 0 });
-  bullets.forEach((b, i) => s.addText(b, { x: 0.55, y: 3.55 + i * 0.36, w: 6.8, h: 0.25, fontSize: 11, color: C.goldDark, breakLine: false, margin: 0 }));
+  s.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 0.14, h: 7.5, fill: { color: C.gold }, line: { color: C.gold } });
+  s.addShape(pptx.ShapeType.rect, { x: 0.72, y: 1.28, w: 6.8, h: 0.03, fill: { color: C.gold }, line: { color: C.gold } });
+  s.addText("CAPITAL COMPASS | INVESTMENT COMMITTEE ANALYSIS", { x: 0.72, y: 0.9, w: 6.6, h: 0.22, fontSize: 10.5, bold: true, color: C.gold, charSpace: 1.1, margin: 0 });
+  s.addText(title, { x: 0.72, y: 1.48, w: 7.25, h: 0.86, fontFace: "Calibri", fontSize: 31, bold: true, color: "FFFFFF", margin: 0, fit: "shrink" });
+  s.addText(subtitle, { x: 0.74, y: 2.55, w: 6.6, h: 0.3, fontSize: 15, color: "CFE1F4", margin: 0 });
+  bullets.forEach((b, i) => {
+    s.addShape(pptx.ShapeType.rect, { x: 0.76, y: 3.38 + i * 0.42, w: 0.11, h: 0.11, fill: { color: i === 0 ? C.cyan : C.gold }, line: { color: i === 0 ? C.cyan : C.gold } });
+    s.addText(b, { x: 1.02, y: 3.31 + i * 0.42, w: 6.5, h: 0.25, fontSize: 10.2, color: "E9F2FC", breakLine: false, margin: 0, fit: "shrink" });
+  });
   [["Shadow map", "risk-led"], ["PE model", "scenario-ready"], ["Compass", "IC direction"]].forEach((m, i) => {
-    s.addShape(pptx.ShapeType.rect, { x: 0.28 + i * 2.35, y: 5.62, w: 1.95, h: 0.82, fill: { color: "FFFFFF" }, line: { color: C.gold, width: 0.75 } });
-    s.addText(m[0], { x: 0.36 + i * 2.35, y: 5.78, w: 1.8, h: 0.2, fontSize: 13, bold: true, color: C.goldDark, align: "center", margin: 0 });
-    s.addText(m[1], { x: 0.36 + i * 2.35, y: 6.12, w: 1.8, h: 0.16, fontSize: 7.5, color: C.gold, align: "center", margin: 0 });
+    s.addShape(pptx.ShapeType.rect, { x: 0.72 + i * 2.25, y: 5.66, w: 1.9, h: 0.76, fill: { color: "FFFFFF", transparency: 88 }, line: { color: "FFFFFF", transparency: 70, width: 0.55 } });
+    s.addText(m[0], { x: 0.8 + i * 2.25, y: 5.82, w: 1.74, h: 0.18, fontSize: 11.5, bold: true, color: "FFFFFF", align: "center", margin: 0 });
+    s.addText(m[1], { x: 0.8 + i * 2.25, y: 6.12, w: 1.74, h: 0.13, fontSize: 6.6, color: C.gold, align: "center", margin: 0 });
   });
 }
 
@@ -743,47 +771,98 @@ function addAgenda(pptx, C) {
 
 function addExecSummary(pptx, C, a) {
   const s = slideBase(pptx, C, "Executive recommendation");
-  card(s, C, 0.55, 1.2, 3.0, 1.35, "Recommendation", a.recommendation, C.gold);
-  card(s, C, 3.85, 1.2, 2.1, 1.35, "Score", `${a.scorecard.total}/100`, scoreColor(a.scorecard.total, C));
-  card(s, C, 6.25, 1.2, 2.6, 1.35, "Sector", a.sector, C.navy);
-  card(s, C, 9.15, 1.2, 3.0, 1.35, "Current bias", a.scorecard.total >= 58 ? "Investable, diligence-led" : "Evidence gap", a.scorecard.total >= 58 ? C.green : C.red);
-  s.addText("Investment thesis", { x: 0.65, y: 3.0, w: 2.5, h: 0.25, fontSize: 12, bold: true, color: C.ink, margin: 0 });
-  s.addText(a.thesis.map((x) => `- ${x}`).join("\n"), { x: 0.65, y: 3.38, w: 5.8, h: 2.55, fontSize: 10.5, color: C.ink, valign: "top", fit: "shrink" });
-  s.addText("Priority diligence burden", { x: 7.0, y: 3.0, w: 3.2, h: 0.25, fontSize: 12, bold: true, color: C.ink, margin: 0 });
-  s.addText(a.risks.slice(0, 5).map((r) => `- ${r[0]}: ${r[1]}`).join("\n"), { x: 7.0, y: 3.38, w: 5.4, h: 2.55, fontSize: 10.2, color: C.ink, valign: "top", fit: "shrink" });
+  card(s, C, 0.6, 1.22, 3.45, 1.18, "Recommendation", a.recommendation, C.gold);
+  card(s, C, 4.28, 1.22, 1.9, 1.18, "IC score", `${a.scorecard.total}/100`, scoreColor(a.scorecard.total, C));
+  card(s, C, 6.4, 1.22, 2.2, 1.18, "Confidence", `${a.scorecard.confidence}/100`, C.navy);
+  card(s, C, 8.85, 1.22, 3.35, 1.18, "Source quality", `${a.sourceQuality?.verdict || "Not assessed"}`, C.cyan);
+  s.addShape(pptx.ShapeType.rect, { x: 0.6, y: 2.78, w: 5.7, h: 3.36, fill: { color: C.cloud }, line: { color: "D9DEE7" } });
+  s.addText("Investment thesis", { x: 0.9, y: 3.06, w: 2.4, h: 0.2, fontSize: 11.5, bold: true, color: C.midnight, margin: 0 });
+  s.addText(a.thesis.slice(0, 3).map((x) => `- ${x}`).join("\n"), { x: 0.9, y: 3.42, w: 5.1, h: 2.15, fontSize: 9.4, color: C.ink, valign: "top", fit: "shrink", breakLine: false });
+  s.addShape(pptx.ShapeType.rect, { x: 6.65, y: 2.78, w: 5.65, h: 3.36, fill: { color: "FFF8EE" }, line: { color: "E9D7B9" } });
+  s.addText("Priority risk burden", { x: 6.95, y: 3.06, w: 2.7, h: 0.2, fontSize: 11.5, bold: true, color: C.midnight, margin: 0 });
+  s.addText(a.risks.slice(0, 5).map((r) => `- ${r[0]}: ${r[1]}`).join("\n"), { x: 6.95, y: 3.42, w: 5.05, h: 2.15, fontSize: 9.2, color: C.ink, valign: "top", fit: "shrink", breakLine: false });
+}
+
+function addInvestmentSnapshot(pptx, C, a) {
+  const s = slideBase(pptx, C, "Investment snapshot and decision gates");
+  const gates = [
+    ["Revenue quality", /customer|contract|retention|renewal/i.test(a.evidence.present.join(" ")) ? "Partially evidenced" : "Open"],
+    ["QoE / margin bridge", /gross margin|audited|financial/i.test(a.evidence.present.join(" ")) ? "Partially evidenced" : "Open"],
+    ["Downside liquidity", a.scorecard.gates.some((g) => /downside/i.test(g.title)) ? "Open" : "Partially evidenced"],
+    ["Exit depth", a.scorecard.gates.some((g) => /exit/i.test(g.title)) ? "Open" : "Partially evidenced"]
+  ];
+  gates.forEach((g, i) => {
+    const x = 0.68 + i * 3.0;
+    const open = g[1] === "Open";
+    s.addShape(pptx.ShapeType.rect, { x, y: 1.25, w: 2.62, h: 1.12, fill: { color: open ? "FFF3F0" : "EEF8F2" }, line: { color: open ? "E5B6AE" : "B8DAC6" } });
+    s.addText(g[0], { x: x + 0.16, y: 1.48, w: 2.25, h: 0.18, fontSize: 9.4, bold: true, color: C.midnight, margin: 0 });
+    s.addText(g[1], { x: x + 0.16, y: 1.83, w: 2.25, h: 0.16, fontSize: 8.2, color: open ? C.red : C.green, bold: true, margin: 0 });
+  });
+  s.addText("Current extracted metrics", { x: 0.68, y: 2.88, w: 3.2, h: 0.2, fontSize: 12, bold: true, color: C.midnight, margin: 0 });
+  const metricRows = Object.entries(a.metrics).slice(0, 7).map(([k, v]) => [titleCase(k), v]);
+  s.addTable([["Metric", "Extracted reference"], ...(metricRows.length ? metricRows : [["Financial metrics", "Limited explicit financial metrics extracted from provided materials"]])], {
+    x: 0.68, y: 3.22, w: 5.2, h: 2.6,
+    colW: [1.45, 3.75],
+    fontSize: 8.4,
+    color: C.ink,
+    border: { type: "solid", color: "DCE1EA", pt: 0.5 },
+    fill: "FFFFFF",
+    margin: 0.06,
+    fit: "shrink"
+  });
+  s.addText("Decision standard", { x: 6.35, y: 2.88, w: 3.2, h: 0.2, fontSize: 12, bold: true, color: C.midnight, margin: 0 });
+  s.addText("The investment should not advance to approval until each open gate has source-backed evidence, owner, timing, valuation impact, and a downside-case mitigation.", { x: 6.35, y: 3.22, w: 5.4, h: 0.7, fontSize: 12.2, bold: true, color: C.midnight, margin: 0.02, fit: "shrink" });
+  s.addText(a.scorecard.gates.length ? a.scorecard.gates.map((g) => `- ${g.title}: ${g.reason}`).join("\n") : "- No hard gates detected by current scoring logic; continue confirmatory diligence.", { x: 6.35, y: 4.18, w: 5.4, h: 1.65, fontSize: 9.2, color: C.ink, margin: 0.02, fit: "shrink" });
+}
+
+function addResearchEvidenceDeck(pptx, C, a) {
+  const s = slideBase(pptx, C, "Research quality and source provenance");
+  card(s, C, 0.65, 1.18, 2.35, 1.0, "Source score", `${a.sourceQuality?.score || 0}/100`, C.cyan);
+  card(s, C, 3.2, 1.18, 2.35, 1.0, "Usable sources", String(a.sourceQuality?.usableSources || 0), C.navy);
+  card(s, C, 5.75, 1.18, 2.35, 1.0, "Institutional", String((a.sourceQuality?.institutionalSources || 0) + (a.sourceQuality?.authoritativeSources || 0)), C.gold);
+  card(s, C, 8.3, 1.18, 3.25, 1.0, "Verdict", a.sourceQuality?.verdict || "Insufficient external validation", C.gold);
+  const rows = (a.sourceQuality?.sources || []).slice(0, 8).map((src, i) => [String(i + 1), src.tier, src.domain, src.title]);
+  s.addTable([["#", "Tier", "Domain", "Research source"], ...(rows.length ? rows : [["1", "Missing", "n/a", "No external URLs supplied; add company website, filings, industry reports, government sources, and reputable news."]])], {
+    x: 0.65, y: 2.65, w: 11.75, h: 3.65,
+    colW: [0.38, 1.35, 2.25, 7.77],
+    fontSize: 7.7,
+    color: C.ink,
+    border: { type: "solid", color: "DCE1EA", pt: 0.45 },
+    fill: "FFFFFF",
+    margin: 0.04,
+    fit: "shrink"
+  });
+  s.addText("PE-grade memo standard: every major claim should be tied to a named source, document, customer call, financial schedule, or external reference.", { x: 0.65, y: 6.42, w: 11.2, h: 0.25, fontSize: 9.4, bold: true, color: C.goldDark, margin: 0 });
 }
 
 function addScorecard(pptx, C, a) {
   const s = slideBase(pptx, C, "Investment screen scorecard");
   const entries = Object.entries(a.scorecard.components);
   entries.forEach(([k, v], i) => {
-    const y = 1.24 + i * 0.82;
-    s.addText(titleCase(k), { x: 0.7, y, w: 2.4, h: 0.24, fontSize: 11, bold: true, color: C.ink, margin: 0 });
-    s.addShape(pptx.ShapeType.rect, { x: 3.2, y: y + 0.03, w: 5.2, h: 0.16, fill: { color: "E7EBF1" }, line: { color: "E7EBF1" } });
-    s.addShape(pptx.ShapeType.rect, { x: 3.2, y: y + 0.03, w: 5.2 * (v.score / 20), h: 0.16, fill: { color: scoreColor(v.score * 5, C) }, line: { color: scoreColor(v.score * 5, C) } });
-    s.addText(`${v.score}/20`, { x: 8.62, y: y - 0.02, w: 0.65, h: 0.2, fontSize: 10, bold: true, color: C.ink, align: "right", margin: 0 });
-    s.addText(v.rationale, { x: 9.55, y: y - 0.08, w: 2.75, h: 0.36, fontSize: 8.2, color: C.grey, fit: "shrink", margin: 0.02 });
+    const y = 1.25 + i * 0.86;
+    s.addText(titleCase(k), { x: 0.72, y, w: 2.6, h: 0.22, fontSize: 10.5, bold: true, color: C.midnight, margin: 0 });
+    s.addShape(pptx.ShapeType.rect, { x: 3.42, y: y + 0.04, w: 4.85, h: 0.18, fill: { color: "E7EBF1" }, line: { color: "E7EBF1" } });
+    s.addShape(pptx.ShapeType.rect, { x: 3.42, y: y + 0.04, w: 4.85 * (v.score / 20), h: 0.18, fill: { color: scoreColor(v.score * 5, C) }, line: { color: scoreColor(v.score * 5, C) } });
+    s.addText(`${v.score}/20`, { x: 8.45, y: y, w: 0.65, h: 0.2, fontSize: 10.5, bold: true, color: C.midnight, align: "right", margin: 0 });
+    s.addText(v.rationale, { x: 9.35, y: y - 0.08, w: 2.95, h: 0.44, fontSize: 7.8, color: C.grey, fit: "shrink", margin: 0.02 });
   });
-  s.addText("Screening interpretation", { x: 0.7, y: 5.65, w: 2.4, h: 0.22, fontSize: 11, bold: true, color: C.ink, margin: 0 });
-  s.addText(a.recommendation, { x: 3.2, y: 5.62, w: 7.6, h: 0.28, fontSize: 13, bold: true, color: C.navy, margin: 0 });
+  s.addShape(pptx.ShapeType.rect, { x: 0.72, y: 5.82, w: 11.55, h: 0.58, fill: { color: "F8F1E6" }, line: { color: "EAD7B6" } });
+  s.addText("Screening interpretation", { x: 0.95, y: 6.02, w: 2.15, h: 0.16, fontSize: 9.4, bold: true, color: C.goldDark, margin: 0 });
+  s.addText(a.recommendation, { x: 3.25, y: 5.98, w: 8.55, h: 0.22, fontSize: 11.8, bold: true, color: C.midnight, margin: 0, fit: "shrink" });
 }
 
 function addRiskRegisterDeck(pptx, C, a) {
   const s = slideBase(pptx, C, "Red flag register");
   s.addText("Underwriting should remain risk-led until each red flag has a source-backed answer and quantified valuation impact.", { x: 0.55, y: 1.08, w: 11.5, h: 0.32, fontSize: 11.5, color: C.grey, margin: 0 });
-  const rows = [["Severity", "Risk", "Why it matters", "Diligence required"], ...a.riskRegister.slice(0, 7).map((r) => [r.severity, r.title, r.whyItMatters, r.diligenceRequired])];
-  s.addTable(rows, {
-    x: 0.55, y: 1.55, w: 12.1, h: 4.85,
-    border: { type: "solid", color: "E1D3BC", pt: 0.55 },
-    fill: "FFFFFF",
-    color: C.ink,
-    fontFace: "Calibri",
-    fontSize: 7.5,
-    bold: false,
-    valign: "mid",
-    colW: [0.85, 2.1, 4.25, 4.9],
-    margin: 0.05,
-    fit: "shrink"
+  a.riskRegister.slice(0, 5).forEach((r, i) => {
+    const y = 1.58 + i * 0.84;
+    const color = r.severity === "Critical" ? C.red : r.severity === "High" ? "C76A19" : C.gold;
+    s.addShape(pptx.ShapeType.rect, { x: 0.65, y, w: 11.75, h: 0.66, fill: { color: "FFFFFF" }, line: { color: "DCE1EA", width: 0.55 } });
+    s.addShape(pptx.ShapeType.rect, { x: 0.65, y, w: 0.1, h: 0.66, fill: { color }, line: { color } });
+    s.addText(r.severity.toUpperCase(), { x: 0.86, y: y + 0.18, w: 0.78, h: 0.12, fontSize: 6.8, bold: true, color, align: "center", margin: 0 });
+    s.addText(r.title, { x: 1.84, y: y + 0.11, w: 2.7, h: 0.16, fontSize: 8.8, bold: true, color: C.midnight, margin: 0, fit: "shrink" });
+    s.addText(r.whyItMatters, { x: 4.72, y: y + 0.09, w: 3.35, h: 0.22, fontSize: 7.2, color: C.ink, margin: 0.02, fit: "shrink" });
+    s.addText(r.diligenceRequired, { x: 8.28, y: y + 0.09, w: 3.85, h: 0.22, fontSize: 7.2, color: C.grey, margin: 0.02, fit: "shrink" });
   });
   s.addShape(pptx.ShapeType.rect, { x: 0.55, y: 6.62, w: 4.2, h: 0.06, fill: { color: C.gold }, line: { color: C.gold } });
   s.addText("IC standard: risk is underwritable only with magnitude, probability, owner, mitigation, and valuation impact.", { x: 0.55, y: 6.78, w: 10.8, h: 0.18, fontSize: 8.5, color: C.goldDark, margin: 0 });
@@ -802,6 +881,26 @@ function addEvidenceGapDeck(pptx, C, a) {
     s.addText("Required before IC approval", { x: x + 1.02, y: y + 0.36, w: 3.7, h: 0.12, fontSize: 6.8, color: C.grey, margin: 0 });
   });
   s.addText("Use this tracker as the diligence workplan: assign owner, source document, evidence standard, and deadline for each gap.", { x: 0.65, y: 6.18, w: 11.2, h: 0.35, fontSize: 11, color: C.goldDark, bold: true, margin: 0 });
+}
+
+function addEnterpriseBenchmarkDeck(pptx, C, a) {
+  const s = slideBase(pptx, C, "Strategic platform benchmark");
+  card(s, C, 0.65, 1.16, 2.55, 1.05, "Enterprise readiness", `${a.enterpriseReadiness?.score || 0}/100`, C.navy);
+  card(s, C, 3.45, 1.16, 3.05, 1.05, "Verdict", a.enterpriseReadiness?.verdict || "Not assessed", C.gold);
+  card(s, C, 6.75, 1.16, 2.25, 1.05, "Audit hash", `${a.auditTrail?.recordHash?.slice(0, 10) || "n/a"}...`, C.cyan);
+  card(s, C, 9.25, 1.16, 2.95, 1.05, "Benchmark set", "S&P / PitchBook / AlphaSense / Datasite / MSCI", C.gold);
+  const rows = (a.benchmark || []).slice(0, 5).map((b) => [b.platform, b.capitalCompassPosition, b.acquisitionImplication]);
+  s.addTable([["Platform", "CapitalCompass position", "Implication"], ...rows], {
+    x: 0.65, y: 2.62, w: 11.75, h: 3.42,
+    colW: [2.55, 6.1, 3.1],
+    fontSize: 7.5,
+    color: C.ink,
+    border: { type: "solid", color: "DCE1EA", pt: 0.45 },
+    fill: "FFFFFF",
+    margin: 0.05,
+    fit: "shrink"
+  });
+  s.addText("Strategic-buyer note: CapitalCompass becomes acquisition-interesting only if the workflow engine is paired with enterprise security, source-linked AI, proprietary benchmark data, APIs, integrations, and customer traction.", { x: 0.65, y: 6.34, w: 11.2, h: 0.34, fontSize: 9.2, bold: true, color: C.midnight, margin: 0.02, fit: "shrink" });
 }
 
 function addTextSlide(pptx, C, title, body, bullets) {
@@ -1137,7 +1236,8 @@ function rankDocuments(companyName, docs) {
     }
     if (tokens.some((t) => doc.name.toLowerCase().includes(t))) score += 8;
     if (/\b(ic|investment|analysis|memo|deck|model|financial|cim|teaser)\b/i.test(doc.name)) score += 1;
-    if (/quanta|vaccine|bharat biotech|ibm/i.test(haystack) && !/pixxel/i.test(haystack)) score -= 10;
+    if (/\b(template|sample deck|reference deck|format|slide master)\b/i.test(haystack)) score -= 14;
+    if (/capital compass|capital in the shadows|nishant prabhakar|ic memo structure|investment committee analysis/i.test(haystack) && !tokens.some((t) => haystack.includes(t))) score -= 10;
     return { ...doc, relevanceScore: score };
   }).sort((a, b) => b.relevanceScore - a.relevanceScore || b.chars - a.chars);
 }
@@ -1225,10 +1325,11 @@ function table(rows) {
 }
 function lightBorders() { return { top: { style: BorderStyle.SINGLE, size: 1, color: "D9DEE7" }, bottom: { style: BorderStyle.SINGLE, size: 1, color: "D9DEE7" }, left: { style: BorderStyle.SINGLE, size: 1, color: "D9DEE7" }, right: { style: BorderStyle.SINGLE, size: 1, color: "D9DEE7" } }; }
 function card(s, C, x, y, w, h, label, value, accent) {
-  s.addShape("roundRect", { x, y, w, h, rectRadius: 0.05, fill: { color: "FFFFFF" }, line: { color: "DCE1EA", width: 0.7 } });
+  s.addShape(pptxShapeRect(), { x, y, w, h, fill: { color: "FFFFFF" }, line: { color: "D8E0EA", width: 0.65 } });
   s.addShape(pptxShapeRect(), { x, y, w: 0.08, h, fill: { color: accent }, line: { color: accent } });
-  s.addText(label, { x: x + 0.22, y: y + 0.18, w: w - 0.4, h: 0.18, fontSize: 7.5, color: C.grey, bold: true, margin: 0 });
-  s.addText(value, { x: x + 0.22, y: y + 0.5, w: w - 0.35, h: h - 0.62, fontSize: String(value).length > 42 ? 9 : 14, color: C.ink, bold: true, fit: "shrink", margin: 0.02 });
+  s.addShape(pptxShapeRect(), { x, y, w, h: 0.05, fill: { color: "F7FAFD" }, line: { color: "F7FAFD" } });
+  s.addText(label, { x: x + 0.2, y: y + 0.14, w: w - 0.36, h: 0.14, fontSize: 6.5, color: C.grey, bold: true, charSpace: 0.4, margin: 0 });
+  s.addText(value, { x: x + 0.2, y: y + 0.42, w: w - 0.32, h: h - 0.48, fontSize: String(value).length > 44 ? 7.8 : String(value).length > 24 ? 9.2 : 13.2, color: C.midnight || C.ink, bold: true, fit: "shrink", margin: 0.02 });
 }
 function pptxShapeRect() { return "rect"; }
 function scoreColor(score, C) { return score >= 70 ? C.green : score >= 55 ? C.gold : C.red; }

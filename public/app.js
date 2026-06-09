@@ -121,7 +121,7 @@ function renderAnalysis(a, files) {
         <div class="doc-control">
           <strong>${included.length} included</strong>
           <span>${excluded.length} excluded as low relevance</span>
-          <span>IC template: ${escapeHtml(a.template.uploadedName || a.template.name || "Default")}</span>
+          <span>${a.template.uploadedName ? `IC template: ${escapeHtml(a.template.uploadedName)}` : "IC template: CapitalCompass PE style"}</span>
         </div>
         ${excluded.length ? `<details><summary>Show excluded documents</summary><ul class="compact-list">${excluded.slice(0, 20).map((d) => `<li>${escapeHtml(d.name)} <span>score ${d.relevanceScore}</span></li>`).join("")}</ul></details>` : ""}
       </section>
