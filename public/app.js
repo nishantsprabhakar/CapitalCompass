@@ -6,6 +6,8 @@ const summary = document.getElementById("summary");
 const templateBox = document.getElementById("templateBox");
 const enterpriseReview = document.getElementById("enterpriseReview");
 
+initInterfaceEffects();
+
 fetch("/api/template")
   .then((r) => r.json())
   .then((t) => {
@@ -233,4 +235,64 @@ function escapeHtml(value) {
 
 function titleCase(value) {
   return String(value).replace(/([A-Z])/g, " $1").replace(/^./, (m) => m.toUpperCase());
+}
+
+function initInterfaceEffects() {
+  document.documentElement.classList.add("js-ready");
+  const progress = document.querySelector(".scroll-progress");
+  const navLinks = [...document.querySelectorAll("nav a[href^='#']")];
+  const sections = navLinks
+    .map((link) => document.querySelector(link.getAttribute("href")))
+    .filter(Boolean);
+
+  function updateProgress() {
+    const max = document.documentElement.scrollHeight - window.innerHeight;
+    const pct = max > 0 ? Math.min(100, Math.max(0, window.scrollY / max * 100)) : 0;
+    if (progress) progress.style.width = `${pct}%`;
+  }
+  updateProgress();
+  window.addEventListener("scroll", updateProgress, { passive: true });
+
+  const revealObserver = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
+      if (entry.isIntersecting) entry.target.classList.add("in-view");
+    });
+  }, { threshold: 0.14 });
+  document.querySelectorAll(".reveal").forEach((el) => revealObserver.observe(el));
+  requestAnimationFrame(() => {
+    document.querySelectorAll(".reveal").forEach((el) => {
+      const rect = el.getBoundingClientRect();
+      if (rect.top < window.innerHeight * 0.92) el.classList.add("in-view");
+    });
+  });
+
+  const navObserver = new IntersectionObserver((entries) => {
+    const visible = entries
+      .filter((entry) => entry.isIntersecting)
+      .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+    if (!visible) return;
+    navLinks.forEach((link) => link.classList.toggle("active", link.getAttribute("href") === `#${visible.target.id}`));
+  }, { rootMargin: "-20% 0px -60% 0px", threshold: [0.12, 0.25, 0.5] });
+  sections.forEach((section) => navObserver.observe(section));
+
+  const tabCopy = {
+    commercial: ["Commercial lens", "Validate whether revenue is durable enough to underwrite.", "Prioritize customer-level revenue, contract enforceability, retention cohorts, pricing power, top-account concentration, references, and pipeline conversion evidence."],
+    financial: ["Financial lens", "Rebuild the case from source-backed drivers, not management-case ambition.", "Tie revenue recognition to invoices and cash, bridge gross margin and EBITDA, quantify working capital, and stress capex, liquidity, and downside case funding."],
+    market: ["Market lens", "Separate attractive category narrative from budget-backed demand.", "Triangulate TAM/SAM/SOM, buyer urgency, competitive substitution, regulatory exposure, public/private comps, and exit-buyer depth."],
+    ic: ["IC lens", "Convert diligence findings into a decision-ready sponsor narrative.", "Frame thesis, red flags, mitigants, valuation sensitivity, return bridge, 100-day plan, and explicit conditions precedent for investment committee approval."]
+  };
+  const stage = document.getElementById("worktabStage");
+  document.querySelectorAll(".worktab").forEach((button) => {
+    button.addEventListener("click", () => {
+      document.querySelectorAll(".worktab").forEach((x) => x.classList.remove("active"));
+      button.classList.add("active");
+      const copy = tabCopy[button.dataset.tab] || tabCopy.commercial;
+      if (stage) {
+        stage.classList.remove("tab-pulse");
+        stage.offsetHeight;
+        stage.innerHTML = `<span>${escapeHtml(copy[0])}</span><strong>${escapeHtml(copy[1])}</strong><p>${escapeHtml(copy[2])}</p>`;
+        stage.classList.add("tab-pulse");
+      }
+    });
+  });
 }

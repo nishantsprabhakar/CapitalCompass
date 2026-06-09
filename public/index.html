@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="/assets/styles.css">
 </head>
 <body>
+  <div class="scroll-progress" aria-hidden="true"></div>
   <main class="app">
     <aside class="side">
       <div class="brand">
@@ -37,7 +38,7 @@
     </aside>
 
     <section class="workspace">
-      <section class="product-hero panel">
+      <section class="product-hero panel reveal">
         <div>
           <p class="eyebrow">Risk-first PE diligence infrastructure</p>
           <h2>Turn data-room materials into IC-ready workstreams</h2>
@@ -51,7 +52,7 @@
         </div>
       </section>
 
-      <form id="dealForm" class="panel command-panel" enctype="multipart/form-data">
+      <form id="dealForm" class="panel command-panel reveal" enctype="multipart/form-data">
         <div class="section-head" id="inputs">
           <div>
             <p class="eyebrow">Capital Compass command center</p>
@@ -102,7 +103,7 @@
         </label>
       </form>
 
-      <section class="panel compact intelligence-panel" id="screen">
+      <section class="panel compact intelligence-panel reveal" id="screen">
         <div class="section-head">
           <div>
             <p class="eyebrow">Investment radar</p>
@@ -119,7 +120,7 @@
         <div id="thesis" class="text-block muted">Run diligence to generate a PE-style initial note and question bank.</div>
       </section>
 
-      <section class="panel enterprise-panel" id="enterprise">
+      <section class="panel enterprise-panel reveal" id="enterprise">
         <div class="section-head">
           <div>
             <p class="eyebrow">Strategic buyer diligence</p>
@@ -131,7 +132,7 @@
         </div>
       </section>
 
-      <section class="panel" id="deep">
+      <section class="panel reveal" id="deep">
         <div class="section-head">
           <div>
             <p class="eyebrow">Deep dive</p>
@@ -139,14 +140,19 @@
           </div>
         </div>
         <div class="workplan">
-          <div><strong>Commercial</strong><span>Customer calls, retention, pricing, cohort analysis, pipeline conversion</span></div>
-          <div><strong>Financial</strong><span>Quality of revenue, EBITDA bridge, working capital, cash conversion, scenario model</span></div>
-          <div><strong>Market</strong><span>TAM/SAM/SOM, growth drivers, competition, regulatory posture, exit buyers</span></div>
-          <div><strong>IC decision</strong><span>Thesis, risks, valuation, returns, mitigants, 100-day value creation plan</span></div>
+          <button type="button" class="worktab active" data-tab="commercial"><strong>Commercial</strong><span>Customer calls, retention, pricing, cohort analysis, pipeline conversion</span></button>
+          <button type="button" class="worktab" data-tab="financial"><strong>Financial</strong><span>Quality of revenue, EBITDA bridge, working capital, cash conversion, scenario model</span></button>
+          <button type="button" class="worktab" data-tab="market"><strong>Market</strong><span>TAM/SAM/SOM, growth drivers, competition, regulatory posture, exit buyers</span></button>
+          <button type="button" class="worktab" data-tab="ic"><strong>IC decision</strong><span>Thesis, risks, valuation, returns, mitigants, 100-day value creation plan</span></button>
+        </div>
+        <div class="tab-stage" id="worktabStage">
+          <span>Commercial lens</span>
+          <strong>Validate whether revenue is durable enough to underwrite.</strong>
+          <p>Prioritize customer-level revenue, contract enforceability, retention cohorts, pricing power, top-account concentration, references, and pipeline conversion evidence.</p>
         </div>
       </section>
 
-      <section class="panel" id="outputs">
+      <section class="panel reveal" id="outputs">
         <div class="section-head">
           <div>
             <p class="eyebrow">Downloads</p>
@@ -156,7 +162,7 @@
         <div id="downloads" class="downloads">No files generated yet.</div>
       </section>
 
-      <section class="panel commercial-panel" id="commercial">
+      <section class="panel commercial-panel reveal" id="commercial">
         <div class="section-head">
           <div>
             <p class="eyebrow">Commercial packaging</p>
