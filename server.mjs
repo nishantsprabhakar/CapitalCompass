@@ -82,7 +82,7 @@ async function handleAnalyze(req, res) {
   }
 
   const sessionId = crypto.randomBytes(5).toString("hex");
-  const companyName = clean(fields.companyName || "Target Company");
+  const suppliedCompanyName = clean(fields.companyName || "");
   const stage = fields.stage || "screening";
   const sourceUrls = splitLines(fields.sourceUrls || "");
   const folderPath = fields.folderPath ? String(fields.folderPath).trim() : "";
@@ -96,6 +96,7 @@ async function handleAnalyze(req, res) {
     .filter((file) => /\.(pptx|docx|xlsx|csv|txt|md)$/i.test(file.name || file.path))
     .slice(0, 140);
   const extracted = await extractCorpus(allFiles);
+  const companyName = suppliedCompanyName || inferCompanyName(extracted, allFiles) || "Target Company";
   const research = await researchUrls(sourceUrls);
   const template = await inspectTemplate(selectedTemplatePath);
   if (templateUpload) {
@@ -1284,6 +1285,63 @@ function rankDocuments(companyName, docs) {
 
 function companyTokens(companyName) {
   return clean(companyName).toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length > 2);
+}
+
+function inferCompanyName(extracted = [], files = []) {
+  const scores = new Map();
+  const add = (raw, weight, reason = "") => {
+    const name = normalizeCompanyCandidate(raw);
+    if (!name) return;
+    const key = name.toLowerCase();
+    const current = scores.get(key) || { name, score: 0, reasons: [] };
+    current.score += weight;
+    if (reason) current.reasons.push(reason);
+    scores.set(key, current);
+  };
+
+  for (const file of files) {
+    const base = path.basename(file.name || file.path || "", path.extname(file.name || file.path || ""));
+    const cleaned = base
+      .replace(/\b(v\d+|final|working|draft|copy|clean|signed|redacted|confidential|deck|cim|teaser|model|financials?|memo|analysis|presentation|investor|information|memorandum|diligence|materials?)\b/gi, " ")
+      .replace(/[_-]+/g, " ")
+      .replace(/\s{2,}/g, " ")
+      .trim();
+    add(cleaned, 10, "filename");
+  }
+
+  const text = extracted.map((d) => `${d.name}\n${d.text.slice(0, 3000)}`).join("\n").slice(0, 20000);
+  const patterns = [
+    [/company\s*name\s*[:\-]\s*([A-Z][A-Za-z0-9&.,' -]{2,70})/gi, 24, "company label"],
+    [/target\s*company\s*[:\-]\s*([A-Z][A-Za-z0-9&.,' -]{2,70})/gi, 20, "target label"],
+    [/^([A-Z][A-Za-z0-9&.,' -]{2,60})\s+(?:investor presentation|investment presentation|company presentation|management presentation|confidential information memorandum|cim|teaser|deck)\b/gim, 18, "title line"],
+    [/\b(?:investor presentation|investment presentation|company presentation|management presentation|confidential information memorandum|cim|teaser)\s+(?:for|on)\s+([A-Z][A-Za-z0-9&.,' -]{2,60})/gi, 16, "presentation title"],
+    [/\b([A-Z][A-Za-z0-9&.' -]{2,45})\s+(?:Private Limited|Pvt\.?\s*Ltd\.?|Limited|Ltd\.?|Inc\.?|Corporation|Corp\.?|LLC|Technologies|Analytics|Systems|Solutions|Labs|AI|Space|Software|Health|Bio|Energy)\b/g, 14, "legal/entity suffix"]
+  ];
+  for (const [re, weight, reason] of patterns) {
+    for (const match of text.matchAll(re)) add(match[1] || match[0], weight, reason);
+  }
+
+  const ranked = [...scores.values()]
+    .filter((x) => x.name.length >= 3)
+    .sort((a, b) => b.score - a.score || a.name.length - b.name.length);
+  return ranked[0]?.score >= 10 ? ranked[0].name : "";
+}
+
+function normalizeCompanyCandidate(raw) {
+  let s = clean(raw)
+    .replace(/\.(pptx|docx|xlsx|pdf|csv|txt|md)$/i, "")
+    .replace(/\b(private limited|pvt\.?\s*ltd\.?|limited|ltd\.?|inc\.?|corporation|corp\.?|llc)\b\.?/gi, "")
+    .replace(/\b(investor presentation|investment presentation|company presentation|management presentation|confidential information memorandum|information memorandum|cim|teaser|deck|financial model|model|analysis|working|draft|final|v\d+)\b/gi, "")
+    .replace(/[_|•]+/g, " ")
+    .replace(/\s+-\s+.*$/g, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+  s = s.replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9)]+$/g, "").trim();
+  if (!s || s.length > 70) return "";
+  if (/^(capital compass|capital in the shadows|nishant prabhakar|target company|company materials|investment committee|private equity|diligence|template|presentation|confidential|strictly confidential)$/i.test(s)) return "";
+  if (s.split(/\s+/).length > 6) return "";
+  if (!/[A-Za-z]{3}/.test(s)) return "";
+  return s.replace(/\b\w/g, (m) => m.toUpperCase()).replace(/\b(Ai|Api|Usa|Uk|Pe|Ic)\b/g, (m) => m.toUpperCase());
 }
 
 function extractEvidence(corpus, metrics) {

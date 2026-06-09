@@ -76,7 +76,12 @@ function buildSubmissionBody() {
 function renderAnalysis(a, files) {
   const included = a.docsSummary.filter((d) => d.status === "included");
   const excluded = a.docsSummary.filter((d) => d.status === "excluded");
+  const companyInput = form.querySelector('input[name="companyName"]');
+  if (companyInput && !companyInput.value.trim() && a.companyName && a.companyName !== "Target Company") {
+    companyInput.value = a.companyName;
+  }
   summary.innerHTML = [
+    metric("Company", a.companyName),
     metric("Recommendation", a.recommendation),
     metric("Score", `${a.scorecard.total}/100`),
     metric("Confidence", `${a.scorecard.confidence || 0}%`),
