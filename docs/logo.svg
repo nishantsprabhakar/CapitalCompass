@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="Capital Compass logo">
+  <defs>
+    <linearGradient id="bg" x1="90" y1="50" x2="420" y2="470" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#071426"/>
+      <stop offset="0.55" stop-color="#102842"/>
+      <stop offset="1" stop-color="#050B14"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="124" y1="96" x2="392" y2="424" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F3D28B"/>
+      <stop offset="0.45" stop-color="#CD9649"/>
+      <stop offset="1" stop-color="#8C5C1E"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#000000" flood-opacity="0.42"/>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="96" fill="url(#bg)"/>
+  <path d="M96 92h248c39 0 72 32 72 72v256H168c-40 0-72-32-72-72V92Z" fill="#0E2238" stroke="#284866" stroke-width="8"/>
+  <path d="M144 92v246c0 19 15 34 34 34h238" fill="none" stroke="#365B79" stroke-width="10"/>
+  <path d="M158 144h176M158 184h134M158 224h154" stroke="#4F6E89" stroke-width="12" stroke-linecap="round" opacity=".55"/>
+  <circle cx="274" cy="286" r="106" fill="#071426" stroke="url(#gold)" stroke-width="10" filter="url(#shadow)"/>
+  <circle cx="274" cy="286" r="74" fill="none" stroke="#2C4A62" stroke-width="2"/>
+  <path d="M274 172l34 85 84 29-84 31-34 84-34-84-84-31 84-29 34-85Z" fill="url(#gold)"/>
+  <path d="M274 202v168M190 286h168" stroke="#071426" stroke-width="8" stroke-linecap="round" opacity=".85"/>
+  <circle cx="274" cy="286" r="14" fill="#071426" stroke="#F3D28B" stroke-width="6"/>
+  <path d="M376 392c-36 24-75 36-116 36-50 0-94-17-132-50" stroke="#CD9649" stroke-width="10" stroke-linecap="round" opacity=".8"/>
+</svg>
