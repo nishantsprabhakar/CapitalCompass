@@ -20,6 +20,23 @@ Then open:
 http://localhost:4186
 ```
 
+## GitHub Pages
+
+The static product page lives in `docs/`.
+
+If the GitHub Actions Pages workflow fails because Pages is not enabled, use this repository setting:
+
+- Settings -> Pages
+- Build and deployment source: Deploy from a branch
+- Branch: `main`
+- Folder: `/docs`
+
+The site URL is expected to be:
+
+```text
+https://nishantsprabhakar.github.io/CapitalCompass/
+```
+
 ## Core Workflow
 
 1. Upload files or provide a local diligence folder path.
