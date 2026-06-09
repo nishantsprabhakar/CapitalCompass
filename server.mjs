@@ -106,6 +106,7 @@ async function handleAnalyze(req, res) {
     template.source = "default";
   }
   const analysis = buildInvestmentAnalysis({ companyName, stage, extracted, research, template, fields, sessionId });
+  analysis.aiReview = await buildAiReview(fields, analysis);
   const files = [];
 
   const safe = slug(companyName);
@@ -137,6 +138,125 @@ async function handleResearch(req, res) {
     .slice(0, 8)
     .map((m) => ({ url: decodeHtml(m[1]), title: stripTags(m[2]) }));
   json(res, { results });
+}
+
+async function buildAiReview(fields, analysis) {
+  const provider = clean(fields.aiProvider || "");
+  const apiKey = String(fields.aiApiKey || "").trim();
+  const model = clean(fields.aiModel || "");
+  const endpoint = String(fields.aiEndpoint || "").trim();
+  if (!provider) return { status: "disabled", provider: "", model: "", summary: "", recommendations: [] };
+  if (!apiKey || !model) return { status: "incomplete", provider, model, summary: "AI API selected, but API key and model are required.", recommendations: [] };
+
+  const prompt = [
+    "You are a senior private equity investment committee reviewer.",
+    "Review the following diligence analysis and provide a concise PE-grade narrative enhancement.",
+    "Focus on risks, evidence gaps, downside case, valuation support, and required diligence. Do not invent facts.",
+    "",
+    `Company: ${analysis.companyName}`,
+    `Sector: ${analysis.sector}`,
+    `Recommendation: ${analysis.recommendation}`,
+    `IC score: ${analysis.scorecard.total}/100`,
+    `Source quality: ${analysis.sourceQuality.score}/100 (${analysis.sourceQuality.verdict})`,
+    `Evidence gaps: ${analysis.evidence.missingEvidence.join(", ") || "None identified"}`,
+    `Top risks: ${analysis.riskRegister.slice(0, 6).map((r) => `${r.severity} - ${r.title}: ${r.whyItMatters}`).join(" | ")}`,
+    `Thesis: ${analysis.thesis.join(" ")}`,
+    "",
+    "Return plain text with sections: AI Investment View, Risks to Underwrite, Diligence Priorities, IC Memo Enhancements."
+  ].join("\n");
+
+  try {
+    const text = await callAiProvider({ provider, endpoint, model, apiKey, prompt });
+    return {
+      status: "complete",
+      provider,
+      model,
+      summary: normalize(text).slice(0, 5000),
+      recommendations: extractAiBullets(text).slice(0, 8)
+    };
+  } catch (error) {
+    return {
+      status: "error",
+      provider,
+      model,
+      summary: `AI API call failed: ${error.message || String(error)}`,
+      recommendations: []
+    };
+  }
+}
+
+async function callAiProvider({ provider, endpoint, model, apiKey, prompt }) {
+  if (provider === "anthropic") {
+    const url = endpoint || "https://api.anthropic.com/v1/messages";
+    const json = await postJson(url, {
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "content-type": "application/json"
+    }, {
+      model,
+      max_tokens: 1200,
+      temperature: 0.2,
+      messages: [{ role: "user", content: prompt }]
+    });
+    return json.content?.map((p) => p.text).filter(Boolean).join("\n") || JSON.stringify(json).slice(0, 4000);
+  }
+  if (provider === "gemini") {
+    const url = endpoint || `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+    const json = await postJson(url, { "content-type": "application/json" }, {
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.2, maxOutputTokens: 1200 }
+    });
+    return json.candidates?.[0]?.content?.parts?.map((p) => p.text).join("\n") || JSON.stringify(json).slice(0, 4000);
+  }
+  const url = endpoint || "https://api.openai.com/v1/chat/completions";
+  const json = await postJson(url, {
+    authorization: `Bearer ${apiKey}`,
+    "content-type": "application/json"
+  }, {
+    model,
+    temperature: 0.2,
+    max_tokens: 1200,
+    messages: [
+      { role: "system", content: "You are a senior private equity diligence reviewer. Be precise, risk-led, and source-aware." },
+      { role: "user", content: prompt }
+    ]
+  });
+  return json.choices?.[0]?.message?.content || json.output_text || JSON.stringify(json).slice(0, 4000);
+}
+
+function postJson(url, headers, payload) {
+  return new Promise((resolve, reject) => {
+    const target = new URL(url);
+    const lib = target.protocol === "https:" ? https : http;
+    const body = JSON.stringify(payload);
+    const req = lib.request(target, {
+      method: "POST",
+      timeout: 45000,
+      headers: {
+        ...headers,
+        "content-length": Buffer.byteLength(body),
+        "user-agent": "CapitalCompass-AI"
+      }
+    }, (r) => {
+      let data = "";
+      r.setEncoding("utf8");
+      r.on("data", (d) => { data += d; if (data.length > 1000000) req.destroy(new Error("AI response too large")); });
+      r.on("end", () => {
+        let parsed;
+        try { parsed = JSON.parse(data || "{}"); } catch { parsed = { text: data }; }
+        if (r.statusCode < 200 || r.statusCode >= 300) return reject(new Error(parsed.error?.message || parsed.message || `AI API returned HTTP ${r.statusCode}`));
+        resolve(parsed);
+      });
+    });
+    req.on("error", reject);
+    req.on("timeout", () => req.destroy(new Error("AI API request timed out")));
+    req.write(body);
+    req.end();
+  });
+}
+
+function extractAiBullets(text) {
+  return normalize(text).split(/(?:\n|^)\s*(?:[-*]|\d+\.)\s+/).map((x) => x.trim()).filter((x) => x.length > 20);
 }
 
 async function parseMultipart(buffer, boundary) {
@@ -630,7 +750,14 @@ async function buildScreeningDocx(outPath, a) {
         heading("6. Detailed Diligence Questions"),
         ...a.questions.flatMap((s) => [subheading(s.title), ...s.items.map((q) => bullet(q))]),
         heading("7. Source Research Captured"),
-        ...(a.research.length ? a.research.map((r) => bullet(`${r.title || r.url}: ${r.summary}`)) : [bullet("No source URLs supplied yet.")])
+        ...(a.research.length ? a.research.map((r) => bullet(`${r.title || r.url}: ${r.summary}`)) : [bullet("No source URLs supplied yet.")]),
+        heading("8. Optional AI Review"),
+        table([
+          ["Status", a.aiReview?.status || "disabled"],
+          ["Provider", a.aiReview?.provider || "Not configured"],
+          ["Model", a.aiReview?.model || "Not configured"]
+        ]),
+        ...(a.aiReview?.summary ? [para(a.aiReview.summary, 10, false, "333333")] : [bullet("No AI API review was generated for this run.")])
       ]
     }]
   });
@@ -751,6 +878,7 @@ async function buildIcDeck(outPath, a, template) {
   addExecSummary(pptx, C, a);
   addInvestmentSnapshot(pptx, C, a);
   addResearchEvidenceDeck(pptx, C, a);
+  addAiReviewDeck(pptx, C, a);
   addRiskRegisterDeck(pptx, C, a);
   addEvidenceGapDeck(pptx, C, a);
   addScorecard(pptx, C, a);
@@ -873,6 +1001,19 @@ function addResearchEvidenceDeck(pptx, C, a) {
     fit: "shrink"
   });
   s.addText("PE-grade memo standard: every major claim should be tied to a named source, document, customer call, financial schedule, or external reference.", { x: 0.65, y: 6.42, w: 11.2, h: 0.25, fontSize: 9.4, bold: true, color: C.goldDark, margin: 0 });
+}
+
+function addAiReviewDeck(pptx, C, a) {
+  const ai = a.aiReview || { status: "disabled", provider: "", model: "", summary: "" };
+  const s = slideBase(pptx, C, "Optional AI API review");
+  card(s, C, 0.65, 1.18, 2.2, 1.0, "Status", ai.status || "disabled", ai.status === "complete" ? C.green : C.gold);
+  card(s, C, 3.1, 1.18, 2.65, 1.0, "Provider", ai.provider || "Not configured", C.navy);
+  card(s, C, 6.0, 1.18, 2.75, 1.0, "Model", ai.model || "Not configured", C.cyan);
+  card(s, C, 9.0, 1.18, 2.85, 1.0, "Data handling", "Key not stored", C.gold);
+  s.addShape(pptx.ShapeType.rect, { x: 0.65, y: 2.7, w: 11.75, h: 3.55, fill: { color: ai.status === "complete" ? "F6FAFF" : "FFF8EE" }, line: { color: ai.status === "complete" ? "DCE8F6" : "EAD7B6" } });
+  s.addText(ai.status === "complete" ? "AI-generated PE review" : "AI layer status", { x: 0.95, y: 3.02, w: 3.2, h: 0.2, fontSize: 12, bold: true, color: C.midnight, margin: 0 });
+  s.addText(ai.summary || "No AI API review was generated. Add any OpenAI-compatible, Anthropic, Gemini, or custom JSON API endpoint, model, and API key in Deal Setup.", { x: 0.95, y: 3.45, w: 10.85, h: 2.15, fontSize: 10, color: C.ink, fit: "shrink", margin: 0.04 });
+  s.addText("CapitalCompass deterministic scoring, evidence gaps, and document outputs still run without an AI API. AI output is supplementary and should be reviewed by the deal team.", { x: 0.65, y: 6.42, w: 11.25, h: 0.25, fontSize: 8.6, bold: true, color: C.goldDark, margin: 0 });
 }
 
 function addScorecard(pptx, C, a) {

@@ -100,6 +100,14 @@ function renderAnalysis(a, files) {
         <div class="card-label">Evidence gaps</div>
         <ul class="compact-list">${a.evidence.missingEvidence.slice(0, 10).map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ul>
       </section>
+      <section class="analysis-card">
+        <div class="card-label">AI enrichment</div>
+        <div class="doc-control">
+          <strong>${escapeHtml(a.aiReview?.status || "disabled")}</strong>
+          <span>${escapeHtml(a.aiReview?.provider || "No AI API configured")}${a.aiReview?.model ? ` | ${escapeHtml(a.aiReview.model)}` : ""}</span>
+        </div>
+        ${a.aiReview?.summary ? `<p class="ai-summary">${escapeHtml(a.aiReview.summary).slice(0, 900)}</p>` : `<p class="ai-summary muted">Optional. Add any AI API endpoint, model, and key in Deal Setup.</p>`}
+      </section>
       <section class="analysis-card wide">
         <div class="card-label">Capital Compass IC readiness score</div>
         <div class="score-grid">

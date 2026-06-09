@@ -56,6 +56,10 @@ CapitalCompass now includes an S&P-style acquisition readiness layer. Each dilig
 
 The score separation is deliberate: platform architecture readiness measures what the product can evidence in local mode, while deal evidence quality and commercial proof remain separate diligence questions for a real strategic process.
 
+## Optional AI API
+
+CapitalCompass can optionally call an AI API during a diligence run. Supported modes are OpenAI-compatible chat completions, Anthropic Messages, Gemini `generateContent`, and custom OpenAI-compatible JSON endpoints. API keys are sent only from the browser to the local server for the current run and are not stored in generated outputs.
+
 ## Commercial Packaging
 
 CapitalCompass is structured for three monetization paths:

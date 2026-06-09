@@ -101,6 +101,34 @@
         <label>Source URLs for web research
           <textarea name="sourceUrls" rows="4" placeholder="Paste company website, filings, reputable news, customer references, industry reports, government databases, or analyst sources. One URL per line."></textarea>
         </label>
+
+        <div class="ai-config">
+          <div>
+            <p class="eyebrow">Optional AI API</p>
+            <h3>Use any AI API for narrative enrichment</h3>
+            <p>Keys are used only for this run on the local server and are not saved in outputs.</p>
+          </div>
+          <div class="ai-grid">
+            <label>Provider
+              <select name="aiProvider">
+                <option value="">Disabled</option>
+                <option value="openai-compatible">OpenAI-compatible</option>
+                <option value="anthropic">Anthropic</option>
+                <option value="gemini">Gemini</option>
+                <option value="custom">Custom JSON API</option>
+              </select>
+            </label>
+            <label>API endpoint
+              <input name="aiEndpoint" placeholder="https://api.openai.com/v1/chat/completions">
+            </label>
+            <label>Model
+              <input name="aiModel" placeholder="gpt-4.1, claude-sonnet-4, gemini-1.5-pro, etc.">
+            </label>
+            <label>API key
+              <input name="aiApiKey" type="password" autocomplete="off" placeholder="Used for this run only">
+            </label>
+          </div>
+        </div>
       </form>
 
       <section class="panel compact intelligence-panel reveal" id="screen">
