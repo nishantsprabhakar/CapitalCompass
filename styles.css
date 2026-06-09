@@ -122,9 +122,10 @@ h1 {
 h2 { margin: 0 0 24px; font-size: clamp(30px, 4vw, 48px); }
 .cards, .pricing {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
 }
+.pricing { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 article {
   border: 1px solid var(--line);
   border-radius: 10px;
