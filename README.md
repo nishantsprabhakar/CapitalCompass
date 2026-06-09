@@ -22,14 +22,14 @@ http://localhost:4186
 
 ## GitHub Pages
 
-The static product page lives in `docs/`.
+The static product page lives in `docs/` and is published to the `gh-pages` branch.
 
-If the GitHub Actions Pages workflow fails because Pages is not enabled, use this repository setting:
+Use this repository setting:
 
 - Settings -> Pages
 - Build and deployment source: Deploy from a branch
-- Branch: `main`
-- Folder: `/docs`
+- Branch: `gh-pages`
+- Folder: `/root`
 
 The site URL is expected to be:
 
@@ -43,6 +43,12 @@ https://nishantsprabhakar.github.io/CapitalCompass/
 2. Add reputable source URLs for research.
 3. Run initial screening or full deep-dive outputs.
 4. Download the generated Word, PowerPoint, and Excel artifacts.
+
+## Proprietary Scoring
+
+CapitalCompass uses the Capital Compass IC Readiness Score v1.0, a rules-based PE underwriting algorithm. It scores five 20-point pillars: market quality, commercial proof, financial quality, operations/moat, and valuation/exit fit. Each pillar is built from granular subfactors with evidence tiers, then adjusted for missing evidence, critical risks, high risks, external-source confidence, and unresolved IC gates.
+
+The score is intentionally conservative: management claims are not treated as proof unless the materials include source-backed evidence such as customer-level revenue, signed contracts, audited financials, margin bridges, downside cases, market sources, exit comps, or value-creation execution details.
 
 ## Commercial Packaging
 

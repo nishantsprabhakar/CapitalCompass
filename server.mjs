@@ -279,11 +279,7 @@ function buildInvestmentAnalysis({ companyName, stage, extracted, research, temp
   const riskRegister = buildRiskRegister(companyName, sector, corpus, metrics, evidence);
   const questions = diligenceQuestions(companyName, sector, metrics, corpus);
   const scorecard = scoreCompany(corpus, metrics, research, evidence, riskRegister);
-  const recommendation = scorecard.total >= 72
-    ? "Proceed only to risk-focused confirmatory diligence"
-    : scorecard.total >= 58
-      ? "Proceed selectively; no IC approval until red flags are cleared"
-      : "Hold pending material diligence evidence";
+  const recommendation = scorecard.recommendation;
   return {
     generatedAt: new Date().toISOString(),
     companyName,
@@ -404,7 +400,10 @@ function buildMemoSections(companyName, sector, geography, thesis, risks, metric
 async function buildScreeningDocx(outPath, a) {
   const rows = [
     ["Recommendation", a.recommendation],
-    ["Score", `${a.scorecard.total}/100`],
+    ["Risk-adjusted score", `${a.scorecard.total}/100`],
+    ["Raw pillar score", `${a.scorecard.raw}/100 before penalties`],
+    ["Evidence confidence", `${a.scorecard.confidence}/100`],
+    ["Scoring methodology", a.scorecard.methodology],
     ["Sector", a.sector],
     ["Geography", a.geography || "Not specified"],
     ["Documents included", a.docsSummary.filter((d) => d.status === "included").map((d) => `${d.name} (${d.type}, relevance ${d.relevanceScore})`).join("; ") || "None"],
@@ -430,7 +429,19 @@ async function buildScreeningDocx(outPath, a) {
         heading("1. Investment View"),
         ...a.thesis.map((x) => bullet(x)),
         heading("2. Scorecard"),
-        table(Object.entries(a.scorecard.components).map(([k, v]) => [titleCase(k), `${v.score}/20`, v.rationale])),
+        table([["Pillar", "Score", "IC interpretation"], ...Object.entries(a.scorecard.components).map(([k, v]) => [titleCase(k), `${v.score}/20`, v.rationale])]),
+        subheading("Scoring Penalties and Gates"),
+        table([
+          ["Adjustment", "Penalty", "Basis"],
+          ["Critical risk", a.scorecard.penalties.criticalRisk, "Critical risks identified in the diligence register."],
+          ["High risk", a.scorecard.penalties.highRisk, "High-severity risks identified in the diligence register."],
+          ["Evidence gaps", a.scorecard.penalties.evidence, "Missing evidence above an acceptable initial-screen threshold."],
+          ["Confidence", a.scorecard.penalties.confidence, "Penalty for weak evidence coverage."],
+          ["IC gates", a.scorecard.penalties.gating, "Commercial, QoE, downside, and exit gates not yet cleared."]
+        ]),
+        ...(a.scorecard.gates.length ? [subheading("Unresolved IC Gates"), table([["Gate", "Reason", "Penalty"], ...a.scorecard.gates.map((g) => [g.title, g.reason, g.penalty])])] : []),
+        subheading("Subfactor Evidence Detail"),
+        table([["Pillar", "Subfactor", "Score", "Evidence tier"], ...Object.entries(a.scorecard.components).flatMap(([k, v]) => (v.subFactors || []).map((f) => [titleCase(k), f.name, `${f.score}/100`, f.evidenceTier]))]),
         heading("3. Risk Register and Red Flags"),
         table([["Severity", "Risk", "Why it matters", "Diligence required"], ...a.riskRegister.map((r) => [r.severity, r.title, r.whyItMatters, r.diligenceRequired])]),
         heading("4. Evidence Gaps"),
@@ -673,6 +684,7 @@ async function buildFinancialModel(outPath, a) {
     ]),
     sheet("Source_Register", [["Source / item", "Status", "Use in model", "Owner / request"], ...a.docsSummary.map((d) => [d.name, d.status || "included", `${d.type}; relevance ${d.relevanceScore ?? ""}; ${d.chars} chars`, "Archive and reconcile"]), ...a.evidence.missingEvidence.map((g) => [g, "Missing", "Required for underwriting", "Diligence request"])]),
     sheet("Risk_Register", [["Severity", "Risk", "Why it matters", "Diligence required"], ...a.riskRegister.slice(0, 12).map((r) => [r.severity, r.title, r.whyItMatters, r.diligenceRequired])]),
+    sheet("Score_Algorithm", scoreAlgorithmRows(a)),
     sheet("Control_Panel", [["Input", "Value", "Comment"], ["Entry EBITDA multiple", 12.0, "Replace with process valuation"], ["Exit EBITDA multiple", 11.0, "Base case exit"], ["Debt / EBITDA at close", 3.0, "Opening leverage"], ["Cash interest rate", 0.11, "Blended cost of debt"], ["Tax rate", 0.25, "Cash tax"], ["Minimum cash", 5.0, "Cash floor"], ["Sponsor fees % EV", 0.025, "Transaction costs"], ["Case selector", "Base", "Base / Downside / Upside"]]),
     sheet("Assumptions", [["Driver", ...years], ["Customers / logos", 20, 35, 50, 72, 98, 128, 160, 195], ["Revenue / customer", 1.1, 1.35, 1.7, 2.1, 2.55, 3.0, 3.35, 3.65], ["Gross margin", 0.35, 0.44, 0.52, 0.56, 0.60, 0.63, 0.65, 0.66], ["R&D % revenue", 0.34, 0.30, 0.24, 0.20, 0.17, 0.15, 0.13, 0.12], ["S&M % revenue", 0.26, 0.24, 0.22, 0.20, 0.18, 0.16, 0.15, 0.14], ["G&A % revenue", 0.18, 0.16, 0.14, 0.13, 0.12, 0.11, 0.10, 0.095], ["Capex % revenue", 0.45, 0.38, 0.30, 0.24, 0.20, 0.17, 0.14, 0.12], ["NWC % revenue", 0.24, 0.23, 0.22, 0.21, 0.20, 0.19, 0.18, 0.18]]),
     sheet("Revenue_Build", [h, ["Customers / logos", "=Assumptions!B2", "=Assumptions!C2", "=Assumptions!D2", "=Assumptions!E2", "=Assumptions!F2", "=Assumptions!G2", "=Assumptions!H2", "=Assumptions!I2"], ["Revenue / customer", "=Assumptions!B3", "=Assumptions!C3", "=Assumptions!D3", "=Assumptions!E3", "=Assumptions!F3", "=Assumptions!G3", "=Assumptions!H3", "=Assumptions!I3"], ["Core imagery revenue", "=B2*B3", "=C2*C3", "=D2*D3", "=E2*E3", "=F2*F3", "=G2*G3", "=H2*H3", "=I2*I3"], ["Analytics attach %", 0.10, 0.13, 0.17, 0.22, 0.27, 0.31, 0.34, 0.36], ["Analytics revenue", "=B4*B5", "=C4*C5", "=D4*D5", "=E4*E5", "=F4*F5", "=G4*G5", "=H4*H5", "=I4*I5"], ["Government / strategic projects", 8, 12, 18, 25, 31, 36, 40, 45], ["Total revenue", "=B4+B6+B7", "=C4+C6+C7", "=D4+D6+D7", "=E4+E6+E7", "=F4+F6+F7", "=G4+G6+G7", "=H4+H6+H7", "=I4+I6+I7"], ["Revenue growth", "", "=C8/B8-1", "=D8/C8-1", "=E8/D8-1", "=F8/E8-1", "=G8/F8-1", "=H8/G8-1", "=I8/H8-1"], ["Contracted revenue %", 0.35, 0.42, 0.50, 0.56, 0.61, 0.65, 0.68, 0.70], ["Contracted revenue", "=B8*B10", "=C8*C10", "=D8*D10", "=E8*E10", "=F8*F10", "=G8*G10", "=H8*H10", "=I8*I10"]]),
@@ -688,6 +700,33 @@ async function buildFinancialModel(outPath, a) {
     sheet("Checks", [["Check", "Status"], ["Revenue positive", '=IF(MIN(Revenue_Build!B8:I8)>0,"OK","Check")'], ["Gross profit ties", '=IF(ABS(COGS_Margin!I7-(Revenue_Build!I8-COGS_Margin!I6))<0.01,"OK","Check")'], ["EBITDA ties", '=IF(ABS(Income_Statement!I5-(COGS_Margin!I7-Opex_Headcount!I6))<0.01,"OK","Check")'], ["MOIC computable", '=IF(ISERROR(Valuation_Returns!B14),"Check","OK")'], ["Exit equity positive", '=IF(Valuation_Returns!B13>0,"OK","Check")'], ["Evidence gaps", a.evidence.missingEvidence.length ? "Open diligence gaps" : "OK"]])
   ];
   await writeXlsx(outPath, sheets);
+}
+
+function scoreAlgorithmRows(a) {
+  return [
+    ["Capital Compass IC Readiness Score v1.0"],
+    ["Methodology", a.scorecard.methodology],
+    ["Recommendation", a.recommendation],
+    ["Risk-adjusted score", a.scorecard.total],
+    ["Raw pillar score", a.scorecard.raw],
+    ["Evidence confidence", a.scorecard.confidence],
+    [],
+    ["Penalty", "Value", "Rationale"],
+    ["Critical risk", a.scorecard.penalties.criticalRisk, "Critical diligence risks carry direct score haircuts."],
+    ["High risk", a.scorecard.penalties.highRisk, "High-severity risks reduce IC readiness."],
+    ["Evidence gaps", a.scorecard.penalties.evidence, "Missing source evidence above threshold reduces underwritability."],
+    ["Confidence", a.scorecard.penalties.confidence, "Low evidence coverage reduces reliance on the score."],
+    ["IC gates", a.scorecard.penalties.gating, "Unresolved commercial, QoE, downside, and exit gates reduce readiness."],
+    [],
+    ["Pillar", "Pillar score /20", "Rationale"],
+    ...Object.entries(a.scorecard.components).map(([k, v]) => [titleCase(k), v.score, v.rationale]),
+    [],
+    ["Pillar", "Subfactor", "Weight %", "Subfactor score /100", "Evidence tier", "Signal hits", "Proof hits"],
+    ...Object.entries(a.scorecard.components).flatMap(([k, v]) => (v.subFactors || []).map((f) => [titleCase(k), f.name, f.weight, f.score, f.evidenceTier, f.hits, f.proofHits])),
+    [],
+    ["Unresolved IC gate", "Reason", "Penalty"],
+    ...(a.scorecard.gates.length ? a.scorecard.gates.map((g) => [g.title, g.reason, g.penalty]) : [["None", "No gating gaps detected by the current materials.", 0]])
+  ];
 }
 
 async function writeXlsx(outPath, sheets) {
@@ -745,22 +784,148 @@ function fetchText(url) {
 }
 
 function scoreCompany(corpus, metrics, research, evidence, riskRegister) {
-  const components = {
-    market: componentScore(corpus, ["tam", "market", "growth", "demand", "industry"], research.length ? 11 : 8, "Market claims need third-party sizing and budget validation."),
-    differentiation: componentScore(corpus, ["proprietary", "patent", "technology", "platform", "unique", "moat"], 9, "Differentiation requires technical and customer proof."),
-    commercial: componentScore(corpus, ["customer", "contract", "pipeline", "retention", "renewal", "arr"], 7, "Commercial quality depends on cohort and customer-level evidence."),
-    financial: componentScore(corpus, ["revenue", "ebitda", "gross margin", "cash", "profit", "working capital"], Object.keys(metrics).length ? 10 : 6, "Financial disclosure needs source reconciliation."),
-    exit: componentScore(corpus, ["acquisition", "strategic", "ipo", "exit", "valuation", "multiple"], 6, "Exit depth is not yet fully evidenced.")
+  const ctx = {
+    corpus: normalize(corpus).toLowerCase(),
+    metrics,
+    research,
+    evidence,
+    riskRegister
   };
-  const evidencePenalty = Math.min(18, Math.max(0, evidence.missingEvidence.length - 3) * 3);
-  const criticalPenalty = riskRegister.filter((r) => r.severity === "Critical").length * 2;
-  const total = Math.max(25, Object.values(components).reduce((s, c) => s + c.score, 0) - evidencePenalty - criticalPenalty);
-  return { total, components };
+  ctx.externalValidation = Math.min(1, research.filter((r) => r.title !== "Fetch failed" && r.summary && !/fetch failed|timed out|error/i.test(r.summary)).length / 4);
+  ctx.metricCoverage = Math.min(1, Object.keys(metrics).length / 5);
+  ctx.evidenceCoverage = evidence.present.length / Math.max(1, evidence.present.length + evidence.missingEvidence.length);
+
+  const components = {
+    market: scorePillar(ctx, "Market quality and demand durability", [
+      sub("TAM/SAM/SOM is source-backed and bottom-up", 0.22, ["tam", "sam", "som", "market size", "addressable market", "bottom-up"], ["third party", "report", "source", "customer count", "budget"]),
+      sub("Growth is supported by buyer budget and urgency", 0.20, ["growth", "cagr", "demand", "budget", "adoption", "tailwind"], ["signed", "customer", "procurement", "reference"]),
+      sub("Market structure supports attractive share capture", 0.18, ["competition", "competitor", "fragmented", "share", "win rate", "substitute"], ["win/loss", "benchmark", "pipeline conversion"]),
+      sub("Demand is resilient across cycles", 0.16, ["mission critical", "recurring", "regulatory", "defense", "government", "enterprise"], ["renewal", "retention", "contract length"]),
+      sub("External research corroborates management claims", 0.24, ["market", "industry", "customer", "competitor"], [], ctx.externalValidation)
+    ]),
+    commercial: scorePillar(ctx, "Revenue quality and commercial proof", [
+      sub("Customer-level revenue and concentration are disclosed", 0.22, ["top customer", "customer-level", "customer concentration", "customers", "clients"], ["top 10", "top 20", "revenue by customer"]),
+      sub("Contracts show enforceability and renewal rights", 0.20, ["contract", "msa", "purchase order", "signed", "renewal", "termination"], ["contract length", "cancellation", "payment terms"]),
+      sub("Retention, churn, and expansion are measurable", 0.20, ["retention", "renewal", "churn", "nrr", "grr", "cohort"], ["gross retention", "net retention", "vintage"]),
+      sub("Pipeline converts historically, not just aspirationally", 0.18, ["pipeline", "booking", "backlog", "funnel", "conversion", "win rate"], ["historical", "stage", "probability", "close date"]),
+      sub("Pricing power and unit economics are visible", 0.20, ["pricing", "price", "gross margin", "unit economics", "acv", "arr"], ["cohort", "margin by customer", "discount"])
+    ]),
+    financial: scorePillar(ctx, "Financial quality and downside case", [
+      sub("Historical financials are auditable and reconciled", 0.20, ["audited", "income statement", "balance sheet", "cash flow", "trial balance"], ["monthly", "reconciliation", "source"]),
+      sub("Revenue recognition bridges to invoices and cash", 0.18, ["revenue recognition", "invoice", "collections", "deferred revenue", "unbilled"], ["cash collection", "credit note", "contract asset"]),
+      sub("Gross margin and EBITDA bridge are underwritable", 0.20, ["gross margin", "cogs", "ebitda", "normalised ebitda", "normalized ebitda"], ["bridge", "adjustment", "one-time", "recurring"]),
+      sub("Working capital and cash conversion are quantified", 0.15, ["working capital", "receivable", "payable", "inventory", "cash conversion"], ["dso", "dpo", "seasonality", "overdue"]),
+      sub("Capital intensity and funding needs are explicit", 0.12, ["capex", "capital expenditure", "funding", "cash runway", "debt"], ["maintenance capex", "growth capex", "contingency"]),
+      sub("Financial metric coverage is sufficient", 0.15, ["revenue", "margin", "growth", "customers", "valuation"], [], ctx.metricCoverage)
+    ]),
+    operationsMoat: scorePillar(ctx, "Moat, operations, and execution risk", [
+      sub("Product/technology performance is independently testable", 0.20, ["technology", "platform", "performance", "accuracy", "latency", "uptime"], ["benchmark", "expert", "third-party", "sla"]),
+      sub("IP and defensibility are more than marketing claims", 0.16, ["proprietary", "patent", "ip", "trade secret", "exclusive"], ["ownership", "filing", "license", "freedom to operate"]),
+      sub("Operations can scale without hidden failure points", 0.18, ["capacity", "scalable", "manufacturing", "supplier", "implementation"], ["single source", "bottleneck", "utilization", "failure rate"]),
+      sub("Management can execute the value creation plan", 0.16, ["management", "founder", "team", "hiring", "org chart"], ["attrition", "incentive", "succession", "operating cadence"]),
+      sub("Regulatory, cyber, data, and compliance risks are mapped", 0.15, ["regulatory", "license", "compliance", "cyber", "data privacy", "export control"], ["approval", "incident", "policy", "audit"]),
+      sub("Value creation levers have owners and cost to execute", 0.15, ["value creation", "pricing", "cost reduction", "cross-sell", "100-day"], ["owner", "cost", "timeline", "kpi"])
+    ]),
+    dealExit: scorePillar(ctx, "Valuation, exit, and sponsor return fit", [
+      sub("Entry valuation is benchmarked to comps and precedent deals", 0.20, ["valuation", "multiple", "ev", "revenue multiple", "ebitda multiple"], ["public comp", "precedent", "benchmark"]),
+      sub("Returns are supported by operating value creation, not multiple expansion", 0.22, ["irr", "moic", "return", "value creation", "margin expansion"], ["base case", "downside", "sensitivity"]),
+      sub("Exit buyer universe is specific and credible", 0.20, ["exit", "strategic buyer", "ipo", "acquisition", "buyer universe"], ["precedent", "acquirer", "sponsor", "public market"]),
+      sub("Downside case preserves liquidity and covenant headroom", 0.18, ["downside", "stress", "scenario", "liquidity", "covenant"], ["cash runway", "debt service", "break-even"]),
+      sub("Governance, ESG, and change-of-control risks are financeable", 0.20, ["governance", "esg", "board", "change of control", "litigation"], ["policy", "incident", "approval", "consent"])
+    ])
+  };
+
+  const raw = Object.values(components).reduce((s, c) => s + c.score, 0);
+  const criticalPenalty = riskRegister.filter((r) => r.severity === "Critical").length * 2.5;
+  const highPenalty = riskRegister.filter((r) => r.severity === "High").length * 0.8;
+  const evidencePenalty = Math.min(15, Math.max(0, evidence.missingEvidence.length - 2) * 1.8);
+  const confidencePenalty = ctx.evidenceCoverage < 0.45 ? 4 : ctx.evidenceCoverage < 0.65 ? 2 : 0;
+  const gatingPenalty = gatingItems(ctx).reduce((sum, g) => sum + g.penalty, 0);
+  const total = Math.max(20, Math.min(95, Math.round(raw - criticalPenalty - highPenalty - evidencePenalty - confidencePenalty - gatingPenalty)));
+  const confidence = Math.round((ctx.evidenceCoverage * 0.45 + ctx.externalValidation * 0.25 + ctx.metricCoverage * 0.30) * 100);
+  const gates = gatingItems(ctx).map(({ title, reason, penalty }) => ({ title, reason, penalty }));
+  const recommendation = total >= 78 && !gates.length
+    ? "Proceed to IC subject to confirmatory diligence"
+    : total >= 68
+      ? "Proceed to risk-focused deep dive; IC approval not yet supportable"
+      : total >= 55
+        ? "Proceed selectively only if gating evidence is delivered"
+        : "Hold pending material diligence evidence";
+  return {
+    total,
+    raw: Math.round(raw),
+    confidence,
+    methodology: "Capital Compass IC Readiness Score v1.0: integrated PE diligence score across market, commercial, financial, operations/moat, and deal/exit pillars; adjusted for evidence quality, critical risks, external validation, and unresolved IC gates.",
+    penalties: {
+      criticalRisk: round1(criticalPenalty),
+      highRisk: round1(highPenalty),
+      evidence: round1(evidencePenalty),
+      confidence: round1(confidencePenalty),
+      gating: round1(gatingPenalty)
+    },
+    gates,
+    recommendation,
+    components
+  };
 }
 
-function componentScore(corpus, needles, base, fallback) {
-  const hits = needles.reduce((n, k) => n + (new RegExp(k, "i").test(corpus) ? 1 : 0), 0);
-  return { score: Math.max(4, Math.min(18, base + hits * 1.5)), rationale: hits ? `Mentions found for ${hits}/${needles.length} screen factors, but score remains capped until source-backed diligence evidence is provided.` : fallback };
+function scorePillar(ctx, label, factors) {
+  const subFactors = factors.map((factor) => scoreSubFactor(ctx, factor));
+  const score = Math.round(subFactors.reduce((s, f) => s + f.weightedScore, 0));
+  const strongest = subFactors.filter((f) => f.score >= 70).map((f) => f.name).slice(0, 2);
+  const weakest = subFactors.filter((f) => f.score < 45).map((f) => f.name).slice(0, 3);
+  return {
+    score: Math.max(3, Math.min(20, score)),
+    rationale: `${label}: ${strongest.length ? `evidence supports ${strongest.join("; ")}` : "limited source-backed proof"}${weakest.length ? `; open IC issues include ${weakest.join("; ")}` : ""}.`,
+    subFactors: subFactors.map(({ name, score, weight, evidenceTier, hits, proofHits }) => ({ name, score, weight, evidenceTier, hits, proofHits }))
+  };
+}
+
+function scoreSubFactor(ctx, factor) {
+  const hits = countHits(ctx.corpus, factor.signals);
+  const proofHits = countHits(ctx.corpus, factor.proofSignals);
+  const explicitValue = typeof factor.explicitScore === "number" ? factor.explicitScore : null;
+  let score;
+  if (explicitValue !== null) {
+    score = 25 + explicitValue * 65;
+  } else {
+    const signalScore = Math.min(45, hits * 9);
+    const proofScore = Math.min(35, proofHits * 11.5);
+    const evidenceLift = ctx.evidenceCoverage * 12;
+    const researchLift = ctx.externalValidation * 8;
+    score = 18 + signalScore + proofScore + evidenceLift + researchLift;
+  }
+  const evidenceTier = proofHits >= 2 ? "Source-backed" : hits >= 2 && proofHits >= 1 ? "Partially evidenced" : hits > 0 ? "Mentioned only" : "Not evidenced";
+  return {
+    name: factor.name,
+    weight: Math.round(factor.weight * 100),
+    score: Math.round(Math.max(0, Math.min(100, score))),
+    weightedScore: Math.max(0, Math.min(20, score / 100 * 20 * factor.weight)),
+    evidenceTier,
+    hits,
+    proofHits
+  };
+}
+
+function sub(name, weight, signals, proofSignals = [], explicitScore = null) {
+  return { name, weight, signals, proofSignals, explicitScore };
+}
+
+function countHits(corpus, signals = []) {
+  return signals.reduce((n, signal) => n + (new RegExp(escapeRegex(signal), "i").test(corpus) ? 1 : 0), 0);
+}
+
+function gatingItems(ctx) {
+  const gates = [];
+  if (!/customer|contract|retention|renewal|cohort|top customer/i.test(ctx.corpus)) gates.push({ title: "Commercial proof gate", reason: "No customer-level or contract durability evidence found.", penalty: 5 });
+  if (!/audited|income statement|cash flow|gross margin|ebitda|trial balance|revenue recognition/i.test(ctx.corpus)) gates.push({ title: "Quality of earnings gate", reason: "Financial evidence is not sufficient to underwrite revenue, margin, and cash conversion.", penalty: 5 });
+  if (!/downside|scenario|sensitivity|liquidity|cash runway|covenant/i.test(ctx.corpus)) gates.push({ title: "Downside protection gate", reason: "No downside case, liquidity stress, or sensitivity evidence found.", penalty: 3 });
+  if (!/exit|strategic buyer|ipo|acquisition|precedent|public comp/i.test(ctx.corpus)) gates.push({ title: "Exit depth gate", reason: "Exit universe and valuation support are not yet evidenced.", penalty: 3 });
+  return gates;
+}
+
+function round1(n) {
+  return Math.round(n * 10) / 10;
 }
 
 function rankDocuments(companyName, docs) {

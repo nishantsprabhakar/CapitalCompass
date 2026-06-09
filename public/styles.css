@@ -363,6 +363,95 @@ details summary {
   font-weight: 800;
   font-size: 13px;
 }
+.score-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.score-pillar {
+  border: 1px solid #cbd9ea;
+  border-radius: 8px;
+  padding: 13px;
+  background:
+    linear-gradient(135deg, rgba(23, 54, 93, .08), transparent 42%),
+    linear-gradient(180deg, #ffffff, #f6faff);
+}
+.score-pillar div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+.score-pillar strong {
+  color: var(--navy);
+  font-size: 13px;
+}
+.score-pillar span {
+  color: var(--gold-dark);
+  font-weight: 900;
+  font-size: 13px;
+}
+.score-pillar p {
+  margin: 8px 0 10px;
+  color: #475467;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.score-pillar ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.score-pillar li {
+  display: grid;
+  grid-template-columns: 54px 1fr auto;
+  gap: 8px;
+  align-items: center;
+  color: #344054;
+  font-size: 12px;
+}
+.score-pillar b {
+  color: var(--ink);
+  font-size: 11px;
+}
+.score-pillar em {
+  color: #667085;
+  font-style: normal;
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+.score-footnote {
+  display: grid;
+  gap: 5px;
+  margin-top: 12px;
+  color: #475467;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.gate-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+.gate-list div {
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1px solid rgba(215, 75, 75, .22);
+  border-left: 4px solid var(--red);
+  border-radius: 8px;
+  background: #fff6f5;
+}
+.gate-list strong {
+  color: var(--red);
+  font-size: 12px;
+}
+.gate-list span {
+  color: #475467;
+  font-size: 12px;
+}
 .risk-table {
   display: grid;
   gap: 10px;
@@ -496,5 +585,5 @@ details summary {
 @media (max-width: 980px) {
   .app { grid-template-columns: 1fr; }
   .side { position: static; height: auto; }
-  .grid, .input-row, .template-upload, .summary-grid, .workplan, .analysis-layout, .question-grid, .product-hero, .trust-strip, .plan-grid { grid-template-columns: 1fr; }
+  .grid, .input-row, .template-upload, .summary-grid, .workplan, .analysis-layout, .question-grid, .score-grid, .product-hero, .trust-strip, .plan-grid { grid-template-columns: 1fr; }
 }

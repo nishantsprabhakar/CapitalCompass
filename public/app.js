@@ -74,6 +74,7 @@ function renderAnalysis(a, files) {
   summary.innerHTML = [
     metric("Recommendation", a.recommendation),
     metric("Score", `${a.scorecard.total}/100`),
+    metric("Confidence", `${a.scorecard.confidence || 0}%`),
     metric("Docs used", `${included.length}/${a.docsSummary.length}`),
     metric("Sources", String(a.research.length))
   ].join("");
@@ -86,6 +87,28 @@ function renderAnalysis(a, files) {
       <section class="analysis-card">
         <div class="card-label">Evidence gaps</div>
         <ul class="compact-list">${a.evidence.missingEvidence.slice(0, 10).map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ul>
+      </section>
+      <section class="analysis-card wide">
+        <div class="card-label">Capital Compass IC readiness score</div>
+        <div class="score-grid">
+          ${Object.entries(a.scorecard.components).map(([key, component]) => `
+            <article class="score-pillar">
+              <div>
+                <strong>${escapeHtml(titleCase(key))}</strong>
+                <span>${escapeHtml(component.score)}/20</span>
+              </div>
+              <p>${escapeHtml(component.rationale)}</p>
+              <ul>
+                ${(component.subFactors || []).slice(0, 4).map((f) => `<li><b>${escapeHtml(f.score)}/100</b> ${escapeHtml(f.name)} <em>${escapeHtml(f.evidenceTier)}</em></li>`).join("")}
+              </ul>
+            </article>
+          `).join("")}
+        </div>
+        <div class="score-footnote">
+          <span>${escapeHtml(a.scorecard.methodology || "Risk-adjusted PE diligence score.")}</span>
+          <span>Penalties: critical ${escapeHtml(a.scorecard.penalties?.criticalRisk ?? 0)}, high ${escapeHtml(a.scorecard.penalties?.highRisk ?? 0)}, evidence ${escapeHtml(a.scorecard.penalties?.evidence ?? 0)}, gates ${escapeHtml(a.scorecard.penalties?.gating ?? 0)}</span>
+        </div>
+        ${(a.scorecard.gates || []).length ? `<div class="gate-list">${a.scorecard.gates.map((g) => `<div><strong>${escapeHtml(g.title)}</strong><span>${escapeHtml(g.reason)}</span></div>`).join("")}</div>` : ""}
       </section>
       <section class="analysis-card">
         <div class="card-label">Document control</div>
@@ -130,4 +153,8 @@ function metric(label, value) {
 
 function escapeHtml(value) {
   return String(value).replace(/[<>&'"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&#39;", '"': "&quot;" }[c]));
+}
+
+function titleCase(value) {
+  return String(value).replace(/([A-Z])/g, " $1").replace(/^./, (m) => m.toUpperCase());
 }
