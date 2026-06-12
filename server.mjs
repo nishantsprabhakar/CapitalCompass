@@ -45,6 +45,7 @@ const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
     if (req.method === "GET" && url.pathname === "/") return serveFile(res, path.join(PUBLIC_DIR, "index.html"));
+    if (req.method === "GET" && url.pathname === "/admin") return serveFile(res, path.join(PUBLIC_DIR, "admin.html"));
     if (req.method === "GET" && url.pathname.startsWith("/assets/")) return serveFile(res, path.join(PUBLIC_DIR, url.pathname.replace("/assets/", "")));
     if (req.method === "GET" && url.pathname === "/api/me") return handleMe(req, res);
     if (req.method === "POST" && url.pathname === "/api/signup") return handleSignup(req, res);

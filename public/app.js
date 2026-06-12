@@ -10,13 +10,7 @@ const promoCode = document.getElementById("promoCode");
 const logoutButton = document.getElementById("logoutButton");
 const accountName = document.getElementById("accountName");
 const accountAccess = document.getElementById("accountAccess");
-const adminPanel = document.getElementById("adminPanel");
 const adminNav = document.getElementById("adminNav");
-const adminUsers = document.getElementById("adminUsers");
-const promoList = document.getElementById("promoList");
-const promoForm = document.getElementById("promoForm");
-const settingsForm = document.getElementById("settingsForm");
-const refreshAdmin = document.getElementById("refreshAdmin");
 const statusEl = document.getElementById("runStatus");
 const downloads = document.getElementById("downloads");
 const thesis = document.getElementById("thesis");
@@ -69,26 +63,6 @@ logoutButton.addEventListener("click", async () => {
 });
 
 promoCode.addEventListener("input", () => refreshPaymentLink());
-refreshAdmin.addEventListener("click", () => loadAdmin());
-promoForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const body = Object.fromEntries(new FormData(promoForm).entries());
-  body.discountPercent = Number(body.discountPercent || 0);
-  const response = await apiFetch("/api/admin/promos", { method: "POST", body: JSON.stringify(body) });
-  if (!response.ok) return showAuthMessage((await response.json()).error || "Could not save promo.", true);
-  promoForm.reset();
-  await loadAdmin();
-});
-settingsForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const body = Object.fromEntries(new FormData(settingsForm).entries());
-  const response = await apiFetch("/api/admin/settings", { method: "PATCH", body: JSON.stringify(body) });
-  const data = await response.json();
-  if (!response.ok) return showAuthMessage(data.error || "Could not save settings.", true);
-  currentPaymentLink = data.settings.paymentLink;
-  await refreshPaymentLink();
-  showAuthMessage("Payment link updated.");
-});
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -177,9 +151,7 @@ function showWorkspace() {
   const access = currentUser.featureAccess || {};
   accountName.textContent = `${currentUser.name || currentUser.email}`;
   accountAccess.textContent = `${currentUser.role.toUpperCase()} | ${currentUser.plan.toUpperCase()} plan | Deep dive ${access.deepDive ? "enabled" : "locked"} | AI review ${access.aiReview ? "enabled" : "locked"}`;
-  adminPanel.classList.toggle("hidden", currentUser.role !== "admin");
   adminNav.classList.toggle("hidden", currentUser.role !== "admin");
-  if (currentUser.role === "admin") loadAdmin();
 }
 
 function showAuthMessage(message, isError = false) {
@@ -196,82 +168,6 @@ async function refreshPaymentLink() {
   } catch {}
   if (paymentLink) paymentLink.href = currentPaymentLink || "#";
   if (premiumButton) premiumButton.href = currentPaymentLink || "#";
-}
-
-async function loadAdmin() {
-  if (!currentUser || currentUser.role !== "admin") return;
-  const [usersResponse, promosResponse, settingsResponse] = await Promise.all([
-    apiFetch("/api/admin/users"),
-    apiFetch("/api/admin/promos"),
-    apiFetch("/api/admin/settings")
-  ]);
-  const usersData = await usersResponse.json();
-  const promosData = await promosResponse.json();
-  const settingsData = await settingsResponse.json();
-  if (usersResponse.ok) renderAdminUsers(usersData.users || []);
-  if (promosResponse.ok) renderPromos(promosData.promos || []);
-  if (settingsResponse.ok && settingsForm.paymentLink) settingsForm.paymentLink.value = settingsData.settings.paymentLink || "";
-}
-
-function renderAdminUsers(users) {
-  adminUsers.innerHTML = users.map((u) => `
-    <div class="admin-user" data-user-id="${escapeHtml(u.id)}">
-      <div>
-        <strong>${escapeHtml(u.name || u.email)}</strong>
-        <span>${escapeHtml(u.email)}</span>
-        <small>${escapeHtml(u.lastLoginAt || "No login yet")}</small>
-      </div>
-      <select data-field="role"><option value="user"${u.role === "user" ? " selected" : ""}>User</option><option value="admin"${u.role === "admin" ? " selected" : ""}>Admin</option></select>
-      <select data-field="plan"><option value="free"${u.plan === "free" ? " selected" : ""}>Free</option><option value="premium"${u.plan === "premium" ? " selected" : ""}>Premium</option><option value="enterprise"${u.plan === "enterprise" ? " selected" : ""}>Enterprise</option></select>
-      <select data-field="status"><option value="active"${u.status === "active" ? " selected" : ""}>Active</option><option value="suspended"${u.status === "suspended" ? " selected" : ""}>Suspended</option></select>
-      <label class="mini-check"><input type="checkbox" data-feature="deepDive"${u.featureAccess?.deepDive ? " checked" : ""}>Deep dive</label>
-      <label class="mini-check"><input type="checkbox" data-feature="aiReview"${u.featureAccess?.aiReview ? " checked" : ""}>AI</label>
-      <input data-field="discountPercent" type="number" min="0" max="95" value="${escapeHtml(u.discountPercent || 0)}">
-      <button type="button" class="secondary" data-action="save-user">Save</button>
-      <button type="button" class="danger" data-action="delete-user">Delete</button>
-    </div>
-  `).join("");
-  adminUsers.querySelectorAll("button").forEach((button) => {
-    button.addEventListener("click", async () => {
-      const row = button.closest(".admin-user");
-      const id = row.dataset.userId;
-      if (button.dataset.action === "delete-user") {
-        const response = await apiFetch(`/api/admin/users/${encodeURIComponent(id)}`, { method: "DELETE" });
-        if (!response.ok) return showAuthMessage((await response.json()).error || "Could not delete user.", true);
-        return loadAdmin();
-      }
-      const body = {
-        role: row.querySelector('[data-field="role"]').value,
-        plan: row.querySelector('[data-field="plan"]').value,
-        status: row.querySelector('[data-field="status"]').value,
-        discountPercent: Number(row.querySelector('[data-field="discountPercent"]').value || 0),
-        featureAccess: {
-          deepDive: row.querySelector('[data-feature="deepDive"]').checked,
-          aiReview: row.querySelector('[data-feature="aiReview"]').checked
-        }
-      };
-      const response = await apiFetch(`/api/admin/users/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(body) });
-      if (!response.ok) return showAuthMessage((await response.json()).error || "Could not update user.", true);
-      showAuthMessage("User access updated.");
-      await loadAdmin();
-    });
-  });
-}
-
-function renderPromos(promos) {
-  promoList.innerHTML = promos.length ? promos.map((p) => `
-    <div class="promo-pill">
-      <strong>${escapeHtml(p.code)}</strong>
-      <span>${escapeHtml(p.discountPercent)}% ${p.active ? "active" : "inactive"}</span>
-      <button type="button" class="danger" data-code="${escapeHtml(p.code)}">Delete</button>
-    </div>
-  `).join("") : `<p class="fine-print">No promo codes yet.</p>`;
-  promoList.querySelectorAll("button").forEach((button) => {
-    button.addEventListener("click", async () => {
-      await apiFetch(`/api/admin/promos/${encodeURIComponent(button.dataset.code)}`, { method: "DELETE" });
-      await loadAdmin();
-    });
-  });
 }
 
 function buildSubmissionBody() {

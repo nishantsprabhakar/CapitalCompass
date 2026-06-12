@@ -84,7 +84,7 @@
         <a href="#deep">Deep dive</a>
         <a href="#outputs">Outputs</a>
         <a href="#commercial">Plans</a>
-        <a href="#adminPanel" id="adminNav" class="hidden">Admin</a>
+        <a href="/admin" id="adminNav" class="hidden">Admin console</a>
       </nav>
       <div class="template template-hidden" id="templateBox"></div>
       <div class="system-card">
@@ -291,40 +291,6 @@
         <p class="fine-print">Capital Compass provides analytical workpapers and diligence workflow support. It does not provide legal, tax, accounting, or investment advice.</p>
       </section>
 
-      <section class="panel admin-panel reveal hidden" id="adminPanel">
-        <div class="section-head">
-          <div>
-            <p class="eyebrow">Owner console</p>
-            <h2>Admin controls</h2>
-          </div>
-          <button id="refreshAdmin" class="secondary" type="button">Refresh</button>
-        </div>
-        <div class="admin-grid">
-          <article class="admin-card wide">
-            <h3>User access</h3>
-            <div id="adminUsers" class="admin-table">Admin data unavailable.</div>
-          </article>
-          <article class="admin-card">
-            <h3>Promo codes</h3>
-            <form id="promoForm" class="stack-form">
-              <input name="code" placeholder="CODE">
-              <input name="discountPercent" type="number" min="0" max="95" placeholder="Discount %">
-              <input name="expiresAt" type="date">
-              <input name="note" placeholder="Internal note">
-              <button class="primary" type="submit">Save promo</button>
-            </form>
-            <div id="promoList" class="promo-list"></div>
-          </article>
-          <article class="admin-card">
-            <h3>Payment link</h3>
-            <form id="settingsForm" class="stack-form">
-              <input name="paymentLink" placeholder="https://buy.stripe.com/...">
-              <button class="primary" type="submit">Save payment link</button>
-            </form>
-            <p class="fine-print">Use a hosted checkout link for international card/payment-method support. Paid users can be upgraded here after payment confirmation.</p>
-          </article>
-        </div>
-      </section>
     </section>
   </main>
   <script src="/assets/app.js"></script>

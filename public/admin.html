@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Capital Compass Admin</title>
+  <link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body class="admin-page">
+  <div class="scroll-progress" aria-hidden="true"></div>
+  <main class="admin-shell">
+    <aside class="admin-side">
+      <div class="brand">
+        <img class="brand-logo" src="/assets/logo.svg?v=2" alt="Capital Compass logo">
+        <div>
+          <h1>Capital Compass</h1>
+          <p>Owner command center</p>
+        </div>
+      </div>
+      <nav>
+        <a href="/" class="active">Diligence app</a>
+        <a href="#users">Users</a>
+        <a href="#promos">Promos</a>
+        <a href="#settings">Payments</a>
+      </nav>
+      <div class="system-card">
+        <span></span>
+        <strong>Admin protected</strong>
+        <p>Role checks, CSRF mutations, entitlement control, and local private user store.</p>
+      </div>
+    </aside>
+
+    <section class="admin-workspace">
+      <section class="admin-hero panel reveal">
+        <div>
+          <p class="eyebrow">Capital Compass owner console</p>
+          <h2>Revenue, access, and user-control cockpit</h2>
+          <p id="adminIdentity">Checking admin session...</p>
+        </div>
+        <div class="account-actions">
+          <button id="refreshAdmin" class="secondary" type="button">Refresh</button>
+          <button id="adminLogout" class="secondary" type="button">Logout</button>
+        </div>
+      </section>
+
+      <section id="adminLocked" class="panel admin-locked hidden">
+        <p class="eyebrow">Access restricted</p>
+        <h2>Admin login required</h2>
+        <p>Sign in with an admin account from the main homepage, then return to this console.</p>
+        <a class="primary-link" href="/">Go to login</a>
+      </section>
+
+      <section id="adminDashboard" class="hidden">
+        <div class="admin-kpis">
+          <article><span>Total users</span><strong id="kpiUsers">-</strong></article>
+          <article><span>Premium / enterprise</span><strong id="kpiPremium">-</strong></article>
+          <article><span>Active promos</span><strong id="kpiPromos">-</strong></article>
+          <article><span>Suspended</span><strong id="kpiSuspended">-</strong></article>
+        </div>
+
+        <section class="panel admin-panel reveal" id="users">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Access registry</p>
+              <h2>User entitlements</h2>
+            </div>
+            <span class="status" id="adminStatus">Ready</span>
+          </div>
+          <div id="adminUsers" class="admin-table">Loading users...</div>
+        </section>
+
+        <div class="admin-two-col">
+          <section class="panel admin-panel reveal" id="promos">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">Commercial controls</p>
+                <h2>Promo codes</h2>
+              </div>
+            </div>
+            <form id="promoForm" class="admin-form">
+              <label>Code<input name="code" placeholder="FOUNDERS25"></label>
+              <label>Discount %<input name="discountPercent" type="number" min="0" max="95" placeholder="25"></label>
+              <label>Expiry<input name="expiresAt" type="date"></label>
+              <label>Internal note<input name="note" placeholder="Pilot fund discount"></label>
+              <button class="primary" type="submit">Save promo</button>
+            </form>
+            <div id="promoList" class="promo-list"></div>
+          </section>
+
+          <section class="panel admin-panel reveal" id="settings">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">Payment rail</p>
+                <h2>International checkout link</h2>
+              </div>
+            </div>
+            <form id="settingsForm" class="admin-form">
+              <label>Hosted payment URL<input name="paymentLink" placeholder="https://buy.stripe.com/..."></label>
+              <button class="primary" type="submit">Save payment link</button>
+            </form>
+            <p class="fine-print">Use a hosted checkout link for international payment methods. After payment confirmation, upgrade the user plan or grant feature entitlements here.</p>
+          </section>
+        </div>
+      </section>
+    </section>
+  </main>
+  <script src="/assets/admin.js"></script>
+</body>
+</html>
