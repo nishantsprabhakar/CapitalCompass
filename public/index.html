@@ -8,7 +8,67 @@
 </head>
 <body>
   <div class="scroll-progress" aria-hidden="true"></div>
-  <main class="app">
+  <section class="homepage" id="authHome">
+    <div class="home-hero">
+      <div class="home-brand">
+        <img class="brand-logo" src="/assets/logo.svg?v=2" alt="Capital Compass logo">
+        <span>Capital Compass</span>
+      </div>
+      <p class="eyebrow">Secure PE intelligence command layer</p>
+      <h1>Institutional diligence, gated access, and premium IC outputs.</h1>
+      <p>Built for funds and deal teams that need confidential local processing, risk-first investment scoring, Office-native exports, and admin-controlled monetization.</p>
+      <div class="home-actions">
+        <a href="#authCard" class="primary-link">Start secure session</a>
+        <a href="#premiumAccess" class="ghost-link">View premium access</a>
+      </div>
+      <div class="trust-strip home-trust">
+        <span>HttpOnly sessions</span>
+        <span>Role-based admin</span>
+        <span>Premium gating</span>
+        <span>Stripe-link ready</span>
+      </div>
+    </div>
+    <div class="auth-card" id="authCard">
+      <div class="auth-tabs">
+        <button type="button" class="auth-tab active" data-auth-mode="login">Login</button>
+        <button type="button" class="auth-tab" data-auth-mode="signup">Sign up</button>
+      </div>
+      <form id="loginForm" class="auth-form">
+        <label>Email
+          <input name="email" type="email" autocomplete="email" required>
+        </label>
+        <label>Password
+          <input name="password" type="password" autocomplete="current-password" minlength="10" required>
+        </label>
+        <button class="primary" type="submit">Login</button>
+      </form>
+      <form id="signupForm" class="auth-form hidden">
+        <label>Name
+          <input name="name" autocomplete="name" required>
+        </label>
+        <label>Email
+          <input name="email" type="email" autocomplete="email" required>
+        </label>
+        <label>Password
+          <input name="password" type="password" autocomplete="new-password" minlength="10" required>
+        </label>
+        <button class="primary" type="submit">Create account</button>
+        <p class="fine-print">The first registered account becomes the admin owner for this local deployment.</p>
+      </form>
+      <div id="authMessage" class="auth-message"></div>
+    </div>
+    <div class="premium-card" id="premiumAccess">
+      <span>Premium</span>
+      <strong>Unlock deep-dive IC memo, financial model, AI review, and enterprise workflows.</strong>
+      <p>International payments are handled through a hosted payment link so Capital Compass does not process card data.</p>
+      <div class="promo-row">
+        <input id="promoCode" placeholder="Promo code">
+        <a id="paymentLink" class="primary-link" href="#" target="_blank" rel="noopener">Open payment link</a>
+      </div>
+    </div>
+  </section>
+
+  <main class="app hidden" id="appShell">
     <aside class="side">
       <div class="brand">
         <img class="brand-logo" src="/assets/logo.svg?v=2" alt="Capital Compass logo">
@@ -24,6 +84,7 @@
         <a href="#deep">Deep dive</a>
         <a href="#outputs">Outputs</a>
         <a href="#commercial">Plans</a>
+        <a href="#adminPanel" id="adminNav" class="hidden">Admin</a>
       </nav>
       <div class="template template-hidden" id="templateBox"></div>
       <div class="system-card">
@@ -38,6 +99,18 @@
     </aside>
 
     <section class="workspace">
+      <section class="account-bar panel reveal">
+        <div>
+          <p class="eyebrow">Secure workspace</p>
+          <h2 id="accountName">Signed in</h2>
+          <p id="accountAccess">Access status loading...</p>
+        </div>
+        <div class="account-actions">
+          <a id="premiumButton" class="ghost-link" href="#" target="_blank" rel="noopener">Premium checkout</a>
+          <button id="logoutButton" class="secondary" type="button">Logout</button>
+        </div>
+      </section>
+
       <section class="product-hero panel reveal">
         <div>
           <p class="eyebrow">Risk-first PE diligence infrastructure</p>
@@ -216,6 +289,41 @@
           </article>
         </div>
         <p class="fine-print">Capital Compass provides analytical workpapers and diligence workflow support. It does not provide legal, tax, accounting, or investment advice.</p>
+      </section>
+
+      <section class="panel admin-panel reveal hidden" id="adminPanel">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Owner console</p>
+            <h2>Admin controls</h2>
+          </div>
+          <button id="refreshAdmin" class="secondary" type="button">Refresh</button>
+        </div>
+        <div class="admin-grid">
+          <article class="admin-card wide">
+            <h3>User access</h3>
+            <div id="adminUsers" class="admin-table">Admin data unavailable.</div>
+          </article>
+          <article class="admin-card">
+            <h3>Promo codes</h3>
+            <form id="promoForm" class="stack-form">
+              <input name="code" placeholder="CODE">
+              <input name="discountPercent" type="number" min="0" max="95" placeholder="Discount %">
+              <input name="expiresAt" type="date">
+              <input name="note" placeholder="Internal note">
+              <button class="primary" type="submit">Save promo</button>
+            </form>
+            <div id="promoList" class="promo-list"></div>
+          </article>
+          <article class="admin-card">
+            <h3>Payment link</h3>
+            <form id="settingsForm" class="stack-form">
+              <input name="paymentLink" placeholder="https://buy.stripe.com/...">
+              <button class="primary" type="submit">Save payment link</button>
+            </form>
+            <p class="fine-print">Use a hosted checkout link for international card/payment-method support. Paid users can be upgraded here after payment confirmation.</p>
+          </article>
+        </div>
       </section>
     </section>
   </main>

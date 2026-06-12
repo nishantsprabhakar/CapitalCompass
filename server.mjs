@@ -29,25 +29,37 @@ const WORK_DIR = path.join(__dirname, "work");
 const OUTPUT_DIR = path.join(__dirname, "outputs");
 const UPLOAD_DIR = path.join(WORK_DIR, "uploads");
 const DEFAULT_TEMPLATE = path.join(WORK_DIR, "Pixxel Analysis_working v2.pptx");
+const AUTH_STORE = path.join(WORK_DIR, "auth-store.json");
 const PORT = Number(process.env.PORT || 4174);
+const DEFAULT_PAYMENT_LINK = process.env.CAPITAL_COMPASS_PAYMENT_LINK || "https://dashboard.stripe.com/payment-links";
 
 await fs.mkdir(PUBLIC_DIR, { recursive: true });
 await fs.mkdir(UPLOAD_DIR, { recursive: true });
 await fs.mkdir(OUTPUT_DIR, { recursive: true });
 
 const stopWords = new Set("the and for with from into that this are was were have has had company business market revenue margin growth product customers customer management investment financial model data source sector in on of to a an by as is be or at its it their they".split(" "));
+let authStore = await loadAuthStore();
+await bootstrapOwnerAccount();
 
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
     if (req.method === "GET" && url.pathname === "/") return serveFile(res, path.join(PUBLIC_DIR, "index.html"));
     if (req.method === "GET" && url.pathname.startsWith("/assets/")) return serveFile(res, path.join(PUBLIC_DIR, url.pathname.replace("/assets/", "")));
+    if (req.method === "GET" && url.pathname === "/api/me") return handleMe(req, res);
+    if (req.method === "POST" && url.pathname === "/api/signup") return handleSignup(req, res);
+    if (req.method === "POST" && url.pathname === "/api/login") return handleLogin(req, res);
+    if (req.method === "POST" && url.pathname === "/api/logout") return handleLogout(req, res);
+    if (req.method === "GET" && url.pathname === "/api/payment-link") return handlePaymentLink(req, res, url);
+    if (url.pathname.startsWith("/api/admin/")) return handleAdmin(req, res, url);
     if (req.method === "GET" && url.pathname === "/api/template") return json(res, await inspectTemplate(DEFAULT_TEMPLATE));
     if (req.method === "GET" && url.pathname === "/api/health") return json(res, platformHealth());
     if (req.method === "GET" && url.pathname === "/api/platform-readiness") return json(res, platformReadinessModel());
     if (req.method === "POST" && url.pathname === "/api/analyze") return handleAnalyze(req, res);
     if (req.method === "POST" && url.pathname === "/api/research") return handleResearch(req, res);
     if (req.method === "GET" && url.pathname.startsWith("/download/")) {
+      const user = await requireAuth(req, res);
+      if (!user) return;
       const name = path.basename(decodeURIComponent(url.pathname.replace("/download/", "")));
       return serveFile(res, path.join(OUTPUT_DIR, name), true);
     }
@@ -62,7 +74,153 @@ server.listen(PORT, () => {
   console.log(`Capital Compass running on http://localhost:${PORT}`);
 });
 
+async function handleMe(req, res) {
+  const session = await getSession(req);
+  if (!session) return json(res, { user: null, csrfToken: "", paymentLink: authStore.settings.paymentLink || DEFAULT_PAYMENT_LINK });
+  return json(res, { user: publicUser(session.user), csrfToken: session.csrfToken, paymentLink: authStore.settings.paymentLink || DEFAULT_PAYMENT_LINK });
+}
+
+async function handleSignup(req, res) {
+  const payload = await readJson(req);
+  const email = normalizeEmail(payload.email);
+  const name = clean(payload.name || email.split("@")[0] || "User");
+  const password = String(payload.password || "");
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json(res, { error: "Enter a valid business email." }, 400);
+  if (password.length < 10) return json(res, { error: "Password must be at least 10 characters." }, 400);
+  if (authStore.users.some((u) => u.email === email)) return json(res, { error: "An account already exists for this email." }, 409);
+
+  const isFirstUser = authStore.users.length === 0;
+  const ownerEmail = normalizeEmail(process.env.CAPITAL_COMPASS_OWNER_EMAIL || "");
+  const user = {
+    id: crypto.randomBytes(8).toString("hex"),
+    email,
+    name,
+    role: isFirstUser || (ownerEmail && email === ownerEmail) ? "admin" : "user",
+    plan: isFirstUser ? "enterprise" : "free",
+    status: "active",
+    discountPercent: 0,
+    featureAccess: {
+      screening: true,
+      deepDive: isFirstUser,
+      aiReview: isFirstUser,
+      exports: true
+    },
+    passwordHash: hashPassword(password),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    lastLoginAt: ""
+  };
+  authStore.users.push(user);
+  await saveAuthStore();
+  return issueSession(req, res, user);
+}
+
+async function handleLogin(req, res) {
+  const payload = await readJson(req);
+  const email = normalizeEmail(payload.email);
+  const password = String(payload.password || "");
+  const user = authStore.users.find((u) => u.email === email);
+  if (!user || !verifyPassword(password, user.passwordHash)) return json(res, { error: "Invalid email or password." }, 401);
+  if (user.status !== "active") return json(res, { error: "This account is not active. Contact the administrator." }, 403);
+  user.lastLoginAt = new Date().toISOString();
+  user.updatedAt = new Date().toISOString();
+  await saveAuthStore();
+  return issueSession(req, res, user);
+}
+
+async function handleLogout(req, res) {
+  const token = getCookie(req, "cc_session");
+  if (token) {
+    authStore.sessions = authStore.sessions.filter((s) => s.tokenHash !== sha256(token));
+    await saveAuthStore();
+  }
+  return json(res, { ok: true }, 200, { "Set-Cookie": clearSessionCookie() });
+}
+
+async function handlePaymentLink(req, res, url) {
+  const user = await requireAuth(req, res);
+  if (!user) return;
+  const promo = clean(url.searchParams.get("promo") || "");
+  const link = appendPaymentParams(authStore.settings.paymentLink || DEFAULT_PAYMENT_LINK, user, promo);
+  return json(res, { paymentLink: link, promo: promo ? getPromo(promo) : null });
+}
+
+async function handleAdmin(req, res, url) {
+  const user = await requireAuth(req, res);
+  if (!user) return;
+  if (user.role !== "admin") return json(res, { error: "Admin access required." }, 403);
+  if (!["GET", "HEAD"].includes(req.method) && !verifyCsrf(req, res, user)) return;
+
+  const parts = url.pathname.split("/").filter(Boolean);
+  const area = parts[2];
+  const id = parts[3] ? decodeURIComponent(parts[3]) : "";
+
+  if (area === "users" && req.method === "GET") {
+    return json(res, { users: authStore.users.map(publicUser) });
+  }
+  if (area === "users" && req.method === "PATCH" && id) {
+    const target = authStore.users.find((u) => u.id === id);
+    if (!target) return json(res, { error: "User not found." }, 404);
+    const payload = await readJson(req);
+    updateUserEntitlement(target, payload);
+    target.updatedAt = new Date().toISOString();
+    await saveAuthStore();
+    return json(res, { user: publicUser(target) });
+  }
+  if (area === "users" && req.method === "DELETE" && id) {
+    if (id === user.id) return json(res, { error: "You cannot delete your own admin account." }, 400);
+    authStore.users = authStore.users.filter((u) => u.id !== id);
+    authStore.sessions = authStore.sessions.filter((s) => s.userId !== id);
+    await saveAuthStore();
+    return json(res, { ok: true });
+  }
+  if (area === "promos" && req.method === "GET") {
+    return json(res, { promos: authStore.promos || [] });
+  }
+  if (area === "promos" && req.method === "POST") {
+    const payload = await readJson(req);
+    const code = clean(payload.code || "").toUpperCase().replace(/[^A-Z0-9_-]/g, "").slice(0, 32);
+    if (!code) return json(res, { error: "Promo code is required." }, 400);
+    const promo = {
+      code,
+      discountPercent: clamp(Number(payload.discountPercent || 0), 0, 95),
+      active: payload.active !== false,
+      maxRedemptions: Math.max(0, Number(payload.maxRedemptions || 0)),
+      expiresAt: clean(payload.expiresAt || ""),
+      note: clean(payload.note || ""),
+      createdAt: new Date().toISOString()
+    };
+    authStore.promos = (authStore.promos || []).filter((p) => p.code !== code);
+    authStore.promos.push(promo);
+    await saveAuthStore();
+    return json(res, { promo });
+  }
+  if (area === "promos" && req.method === "DELETE" && id) {
+    authStore.promos = (authStore.promos || []).filter((p) => p.code !== id.toUpperCase());
+    await saveAuthStore();
+    return json(res, { ok: true });
+  }
+  if (area === "settings" && req.method === "GET") {
+    return json(res, { settings: authStore.settings });
+  }
+  if (area === "settings" && req.method === "PATCH") {
+    const payload = await readJson(req);
+    if (payload.paymentLink !== undefined) {
+      const link = String(payload.paymentLink || "").trim();
+      if (link && !/^https:\/\/.+/i.test(link)) return json(res, { error: "Payment link must be an https URL." }, 400);
+      authStore.settings.paymentLink = link || DEFAULT_PAYMENT_LINK;
+    }
+    authStore.settings.updatedAt = new Date().toISOString();
+    await saveAuthStore();
+    return json(res, { settings: authStore.settings });
+  }
+  return json(res, { error: "Admin endpoint not found." }, 404);
+}
+
 async function handleAnalyze(req, res) {
+  const user = await requireAuth(req, res);
+  if (!user) return;
+  if (!verifyCsrf(req, res, user)) return;
   const contentType = req.headers["content-type"] || "";
   const contentLength = Number(req.headers["content-length"] || 0);
   if (contentLength > 150 * 1024 * 1024) {
@@ -84,6 +242,16 @@ async function handleAnalyze(req, res) {
   const sessionId = crypto.randomBytes(5).toString("hex");
   const suppliedCompanyName = clean(fields.companyName || "");
   const stage = fields.stage || "screening";
+  if ((stage === "deepDive" || stage === "full") && !canUseFeature(user, "deepDive")) {
+    return json(res, {
+      error: "Premium access required for deep-dive IC memo and financial model outputs. Use the premium payment link, then ask the admin to grant access."
+    }, 402);
+  }
+  if (clean(fields.aiProvider || "") && !canUseFeature(user, "aiReview")) {
+    return json(res, {
+      error: "Premium access required for AI enrichment. Disable the AI provider or upgrade the account."
+    }, 402);
+  }
   const sourceUrls = splitLines(fields.sourceUrls || "");
   const folderPath = fields.folderPath ? String(fields.folderPath).trim() : "";
   const folderFiles = folderPath ? await listReadableFiles(folderPath) : [];
@@ -130,6 +298,9 @@ async function handleAnalyze(req, res) {
 }
 
 async function handleResearch(req, res) {
+  const user = await requireAuth(req, res);
+  if (!user) return;
+  if (!verifyCsrf(req, res, user)) return;
   const payload = JSON.parse((await readBody(req)).toString("utf8") || "{}");
   const q = encodeURIComponent(payload.query || "");
   if (!q) return json(res, { results: [] });
@@ -1584,6 +1755,169 @@ function xml(v) { return String(v ?? "").replace(/[<>&'"]/g, (c) => ({ "<": "&lt
 function escapeRegex(v) { return String(v).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
 function col(n) { let s = ""; for (n += 1; n; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(((n - 1) % 26) + 65) + s; return s; }
 function naturalSort(a, b) { return a.localeCompare(b, undefined, { numeric: true }); }
+function normalizeEmail(v) { return String(v || "").trim().toLowerCase().slice(0, 180); }
+function sha256(v) { return crypto.createHash("sha256").update(String(v)).digest("hex"); }
+function clamp(v, min, max) { return Math.min(max, Math.max(min, Number.isFinite(v) ? v : min)); }
+function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString("hex");
+  const hash = crypto.scryptSync(String(password), salt, 64).toString("hex");
+  return `scrypt$${salt}$${hash}`;
+}
+function verifyPassword(password, encoded) {
+  const [, salt, hash] = String(encoded || "").split("$");
+  if (!salt || !hash) return false;
+  const actual = crypto.scryptSync(String(password), salt, 64);
+  const expected = Buffer.from(hash, "hex");
+  return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
+}
+async function loadAuthStore() {
+  try {
+    const parsed = JSON.parse(await fs.readFile(AUTH_STORE, "utf8"));
+    return {
+      users: Array.isArray(parsed.users) ? parsed.users : [],
+      sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [],
+      promos: Array.isArray(parsed.promos) ? parsed.promos : [],
+      settings: { paymentLink: DEFAULT_PAYMENT_LINK, ...(parsed.settings || {}) }
+    };
+  } catch {
+    return { users: [], sessions: [], promos: [], settings: { paymentLink: DEFAULT_PAYMENT_LINK, createdAt: new Date().toISOString() } };
+  }
+}
+async function saveAuthStore() {
+  const tmp = `${AUTH_STORE}.tmp`;
+  await fs.writeFile(tmp, JSON.stringify(authStore, null, 2));
+  await fs.rename(tmp, AUTH_STORE);
+}
+async function bootstrapOwnerAccount() {
+  const email = normalizeEmail(process.env.CAPITAL_COMPASS_OWNER_EMAIL || "");
+  const password = String(process.env.CAPITAL_COMPASS_OWNER_PASSWORD || "");
+  if (!email || !password || authStore.users.some((u) => u.email === email)) return;
+  authStore.users.push({
+    id: crypto.randomBytes(8).toString("hex"),
+    email,
+    name: "Nishant Prabhakar",
+    role: "admin",
+    plan: "enterprise",
+    status: "active",
+    discountPercent: 0,
+    featureAccess: { screening: true, deepDive: true, aiReview: true, exports: true },
+    passwordHash: hashPassword(password),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    lastLoginAt: ""
+  });
+  await saveAuthStore();
+}
+function publicUser(user) {
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    plan: user.plan,
+    status: user.status,
+    discountPercent: Number(user.discountPercent || 0),
+    featureAccess: { screening: true, exports: true, ...(user.featureAccess || {}) },
+    createdAt: user.createdAt || "",
+    updatedAt: user.updatedAt || "",
+    lastLoginAt: user.lastLoginAt || ""
+  };
+}
+function canUseFeature(user, feature) {
+  if (!user || user.status !== "active") return false;
+  if (user.role === "admin" || ["premium", "enterprise"].includes(user.plan)) return true;
+  return Boolean(user.featureAccess?.[feature]);
+}
+function updateUserEntitlement(user, payload) {
+  if (payload.name !== undefined) user.name = clean(payload.name);
+  if (payload.role !== undefined && ["user", "admin"].includes(payload.role)) user.role = payload.role;
+  if (payload.plan !== undefined && ["free", "premium", "enterprise"].includes(payload.plan)) user.plan = payload.plan;
+  if (payload.status !== undefined && ["active", "suspended"].includes(payload.status)) user.status = payload.status;
+  if (payload.discountPercent !== undefined) user.discountPercent = clamp(Number(payload.discountPercent), 0, 95);
+  if (payload.featureAccess && typeof payload.featureAccess === "object") {
+    user.featureAccess = {
+      screening: true,
+      exports: true,
+      deepDive: Boolean(payload.featureAccess.deepDive),
+      aiReview: Boolean(payload.featureAccess.aiReview)
+    };
+  }
+}
+async function issueSession(req, res, user) {
+  const raw = crypto.randomBytes(32).toString("base64url");
+  const session = {
+    tokenHash: sha256(raw),
+    userId: user.id,
+    csrfToken: crypto.randomBytes(18).toString("base64url"),
+    createdAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+  };
+  authStore.sessions = authStore.sessions.filter((s) => s.userId !== user.id || Date.parse(s.expiresAt) > Date.now());
+  authStore.sessions.push(session);
+  await saveAuthStore();
+  return json(res, { user: publicUser(user), csrfToken: session.csrfToken, paymentLink: authStore.settings.paymentLink || DEFAULT_PAYMENT_LINK }, 200, { "Set-Cookie": sessionCookie(raw, req) });
+}
+async function getSession(req) {
+  const token = getCookie(req, "cc_session");
+  if (!token) return null;
+  const tokenHash = sha256(token);
+  const session = authStore.sessions.find((s) => s.tokenHash === tokenHash && Date.parse(s.expiresAt) > Date.now());
+  if (!session) return null;
+  const user = authStore.users.find((u) => u.id === session.userId && u.status === "active");
+  if (!user) return null;
+  return { session, user, csrfToken: session.csrfToken };
+}
+async function requireAuth(req, res) {
+  const session = await getSession(req);
+  if (!session) {
+    json(res, { error: "Login required." }, 401);
+    return null;
+  }
+  return session.user;
+}
+function verifyCsrf(req, res, user) {
+  const token = getCookie(req, "cc_session");
+  const session = authStore.sessions.find((s) => s.userId === user.id && s.tokenHash === sha256(token) && Date.parse(s.expiresAt) > Date.now());
+  const supplied = String(req.headers["x-csrf-token"] || "");
+  if (!session || !supplied || supplied !== session.csrfToken) {
+    json(res, { error: "Security token expired. Please refresh and sign in again." }, 403);
+    return false;
+  }
+  return true;
+}
+function getCookie(req, name) {
+  return String(req.headers.cookie || "").split(";").map((v) => v.trim()).find((v) => v.startsWith(`${name}=`))?.slice(name.length + 1) || "";
+}
+function sessionCookie(value, req) {
+  const secure = process.env.CAPITAL_COMPASS_SECURE_COOKIE === "1" || req.headers["x-forwarded-proto"] === "https";
+  return [`cc_session=${value}`, "HttpOnly", "SameSite=Lax", "Path=/", "Max-Age=604800", secure ? "Secure" : ""].filter(Boolean).join("; ");
+}
+function clearSessionCookie() {
+  return "cc_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0";
+}
+function appendPaymentParams(link, user, promoCode) {
+  try {
+    const u = new URL(link);
+    u.searchParams.set("client_reference_id", user.id);
+    u.searchParams.set("prefilled_email", user.email);
+    const promo = getPromo(promoCode);
+    if (promo?.active) u.searchParams.set("prefilled_promo_code", promo.code);
+    return u.toString();
+  } catch {
+    return link;
+  }
+}
+function getPromo(code) {
+  const normalized = clean(code || "").toUpperCase();
+  if (!normalized) return null;
+  const promo = (authStore.promos || []).find((p) => p.code === normalized);
+  if (!promo) return null;
+  if (promo.expiresAt && Date.parse(promo.expiresAt) < Date.now()) return { ...promo, active: false };
+  return promo;
+}
+async function readJson(req) {
+  return JSON.parse((await readBody(req)).toString("utf8") || "{}");
+}
 function readBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -1600,7 +1934,7 @@ async function serveFile(res, file, download = false) {
   res.writeHead(200, { "Content-Type": types[ext] || "application/octet-stream", ...(download ? { "Content-Disposition": `attachment; filename="${path.basename(file)}"` } : {}) });
   res.end(data);
 }
-function json(res, payload, status = 200) {
-  res.writeHead(status, { "Content-Type": "application/json" });
+function json(res, payload, status = 200, headers = {}) {
+  res.writeHead(status, { "Content-Type": "application/json", ...headers });
   res.end(JSON.stringify(payload));
 }

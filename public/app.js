@@ -1,12 +1,34 @@
 const form = document.getElementById("dealForm");
+const authHome = document.getElementById("authHome");
+const appShell = document.getElementById("appShell");
+const loginForm = document.getElementById("loginForm");
+const signupForm = document.getElementById("signupForm");
+const authMessage = document.getElementById("authMessage");
+const paymentLink = document.getElementById("paymentLink");
+const premiumButton = document.getElementById("premiumButton");
+const promoCode = document.getElementById("promoCode");
+const logoutButton = document.getElementById("logoutButton");
+const accountName = document.getElementById("accountName");
+const accountAccess = document.getElementById("accountAccess");
+const adminPanel = document.getElementById("adminPanel");
+const adminNav = document.getElementById("adminNav");
+const adminUsers = document.getElementById("adminUsers");
+const promoList = document.getElementById("promoList");
+const promoForm = document.getElementById("promoForm");
+const settingsForm = document.getElementById("settingsForm");
+const refreshAdmin = document.getElementById("refreshAdmin");
 const statusEl = document.getElementById("runStatus");
 const downloads = document.getElementById("downloads");
 const thesis = document.getElementById("thesis");
 const summary = document.getElementById("summary");
 const templateBox = document.getElementById("templateBox");
 const enterpriseReview = document.getElementById("enterpriseReview");
+let currentUser = null;
+let csrfToken = "";
+let currentPaymentLink = "#";
 
 initInterfaceEffects();
+initAuth();
 
 fetch("/api/template")
   .then((r) => r.json())
@@ -16,8 +38,61 @@ fetch("/api/template")
   })
   .catch(() => { templateBox.textContent = "Template metadata unavailable."; });
 
+document.querySelectorAll(".auth-tab").forEach((button) => {
+  button.addEventListener("click", () => {
+    document.querySelectorAll(".auth-tab").forEach((x) => x.classList.remove("active"));
+    button.classList.add("active");
+    const mode = button.dataset.authMode;
+    loginForm.classList.toggle("hidden", mode !== "login");
+    signupForm.classList.toggle("hidden", mode !== "signup");
+    authMessage.textContent = "";
+  });
+});
+
+loginForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  await authSubmit("/api/login", loginForm, "Login failed");
+});
+
+signupForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  await authSubmit("/api/signup", signupForm, "Signup failed");
+});
+
+logoutButton.addEventListener("click", async () => {
+  await apiFetch("/api/logout", { method: "POST" });
+  currentUser = null;
+  csrfToken = "";
+  appShell.classList.add("hidden");
+  authHome.classList.remove("hidden");
+  authMessage.textContent = "Logged out securely.";
+});
+
+promoCode.addEventListener("input", () => refreshPaymentLink());
+refreshAdmin.addEventListener("click", () => loadAdmin());
+promoForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const body = Object.fromEntries(new FormData(promoForm).entries());
+  body.discountPercent = Number(body.discountPercent || 0);
+  const response = await apiFetch("/api/admin/promos", { method: "POST", body: JSON.stringify(body) });
+  if (!response.ok) return showAuthMessage((await response.json()).error || "Could not save promo.", true);
+  promoForm.reset();
+  await loadAdmin();
+});
+settingsForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const body = Object.fromEntries(new FormData(settingsForm).entries());
+  const response = await apiFetch("/api/admin/settings", { method: "PATCH", body: JSON.stringify(body) });
+  const data = await response.json();
+  if (!response.ok) return showAuthMessage(data.error || "Could not save settings.", true);
+  currentPaymentLink = data.settings.paymentLink;
+  await refreshPaymentLink();
+  showAuthMessage("Payment link updated.");
+});
+
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (!currentUser) return showAuthMessage("Please login before running diligence.", true);
   const button = form.querySelector("button[type=submit]");
   button.disabled = true;
   statusEl.textContent = "Running";
@@ -27,7 +102,7 @@ form.addEventListener("submit", async (event) => {
 
   try {
     const body = buildSubmissionBody();
-    const response = await fetch("/api/analyze", { method: "POST", body });
+    const response = await apiFetch("/api/analyze", { method: "POST", body });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || "Analysis failed");
     renderAnalysis(data.analysis, data.files);
@@ -41,6 +116,163 @@ form.addEventListener("submit", async (event) => {
     button.disabled = false;
   }
 });
+
+async function initAuth() {
+  try {
+    const response = await fetch("/api/me", { credentials: "same-origin" });
+    const data = await response.json();
+    csrfToken = data.csrfToken || "";
+    currentPaymentLink = data.paymentLink || "#";
+    if (data.user) {
+      currentUser = data.user;
+      showWorkspace();
+    } else {
+      authHome.classList.remove("hidden");
+      appShell.classList.add("hidden");
+    }
+    await refreshPaymentLink();
+  } catch {
+    authHome.classList.remove("hidden");
+  }
+}
+
+async function authSubmit(url, sourceForm, fallback) {
+  const button = sourceForm.querySelector("button");
+  button.disabled = true;
+  showAuthMessage("Securing session...");
+  try {
+    const payload = Object.fromEntries(new FormData(sourceForm).entries());
+    const response = await fetch(url, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || fallback);
+    currentUser = data.user;
+    csrfToken = data.csrfToken || "";
+    currentPaymentLink = data.paymentLink || "#";
+    sourceForm.reset();
+    showWorkspace();
+    await refreshPaymentLink();
+  } catch (error) {
+    showAuthMessage(error.message, true);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function apiFetch(url, options = {}) {
+  const headers = { ...(options.headers || {}) };
+  const isFormData = options.body instanceof FormData;
+  if (!isFormData && options.body && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
+  if ((options.method || "GET").toUpperCase() !== "GET" && csrfToken) headers["X-CSRF-Token"] = csrfToken;
+  return fetch(url, { ...options, credentials: "same-origin", headers });
+}
+
+function showWorkspace() {
+  authHome.classList.add("hidden");
+  appShell.classList.remove("hidden");
+  const access = currentUser.featureAccess || {};
+  accountName.textContent = `${currentUser.name || currentUser.email}`;
+  accountAccess.textContent = `${currentUser.role.toUpperCase()} | ${currentUser.plan.toUpperCase()} plan | Deep dive ${access.deepDive ? "enabled" : "locked"} | AI review ${access.aiReview ? "enabled" : "locked"}`;
+  adminPanel.classList.toggle("hidden", currentUser.role !== "admin");
+  adminNav.classList.toggle("hidden", currentUser.role !== "admin");
+  if (currentUser.role === "admin") loadAdmin();
+}
+
+function showAuthMessage(message, isError = false) {
+  authMessage.textContent = message;
+  authMessage.classList.toggle("error", Boolean(isError));
+}
+
+async function refreshPaymentLink() {
+  const code = encodeURIComponent(promoCode?.value?.trim() || "");
+  try {
+    const response = currentUser ? await fetch(`/api/payment-link${code ? `?promo=${code}` : ""}`, { credentials: "same-origin" }) : null;
+    const data = response?.ok ? await response.json() : { paymentLink: currentPaymentLink };
+    currentPaymentLink = data.paymentLink || currentPaymentLink || "#";
+  } catch {}
+  if (paymentLink) paymentLink.href = currentPaymentLink || "#";
+  if (premiumButton) premiumButton.href = currentPaymentLink || "#";
+}
+
+async function loadAdmin() {
+  if (!currentUser || currentUser.role !== "admin") return;
+  const [usersResponse, promosResponse, settingsResponse] = await Promise.all([
+    apiFetch("/api/admin/users"),
+    apiFetch("/api/admin/promos"),
+    apiFetch("/api/admin/settings")
+  ]);
+  const usersData = await usersResponse.json();
+  const promosData = await promosResponse.json();
+  const settingsData = await settingsResponse.json();
+  if (usersResponse.ok) renderAdminUsers(usersData.users || []);
+  if (promosResponse.ok) renderPromos(promosData.promos || []);
+  if (settingsResponse.ok && settingsForm.paymentLink) settingsForm.paymentLink.value = settingsData.settings.paymentLink || "";
+}
+
+function renderAdminUsers(users) {
+  adminUsers.innerHTML = users.map((u) => `
+    <div class="admin-user" data-user-id="${escapeHtml(u.id)}">
+      <div>
+        <strong>${escapeHtml(u.name || u.email)}</strong>
+        <span>${escapeHtml(u.email)}</span>
+        <small>${escapeHtml(u.lastLoginAt || "No login yet")}</small>
+      </div>
+      <select data-field="role"><option value="user"${u.role === "user" ? " selected" : ""}>User</option><option value="admin"${u.role === "admin" ? " selected" : ""}>Admin</option></select>
+      <select data-field="plan"><option value="free"${u.plan === "free" ? " selected" : ""}>Free</option><option value="premium"${u.plan === "premium" ? " selected" : ""}>Premium</option><option value="enterprise"${u.plan === "enterprise" ? " selected" : ""}>Enterprise</option></select>
+      <select data-field="status"><option value="active"${u.status === "active" ? " selected" : ""}>Active</option><option value="suspended"${u.status === "suspended" ? " selected" : ""}>Suspended</option></select>
+      <label class="mini-check"><input type="checkbox" data-feature="deepDive"${u.featureAccess?.deepDive ? " checked" : ""}>Deep dive</label>
+      <label class="mini-check"><input type="checkbox" data-feature="aiReview"${u.featureAccess?.aiReview ? " checked" : ""}>AI</label>
+      <input data-field="discountPercent" type="number" min="0" max="95" value="${escapeHtml(u.discountPercent || 0)}">
+      <button type="button" class="secondary" data-action="save-user">Save</button>
+      <button type="button" class="danger" data-action="delete-user">Delete</button>
+    </div>
+  `).join("");
+  adminUsers.querySelectorAll("button").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const row = button.closest(".admin-user");
+      const id = row.dataset.userId;
+      if (button.dataset.action === "delete-user") {
+        const response = await apiFetch(`/api/admin/users/${encodeURIComponent(id)}`, { method: "DELETE" });
+        if (!response.ok) return showAuthMessage((await response.json()).error || "Could not delete user.", true);
+        return loadAdmin();
+      }
+      const body = {
+        role: row.querySelector('[data-field="role"]').value,
+        plan: row.querySelector('[data-field="plan"]').value,
+        status: row.querySelector('[data-field="status"]').value,
+        discountPercent: Number(row.querySelector('[data-field="discountPercent"]').value || 0),
+        featureAccess: {
+          deepDive: row.querySelector('[data-feature="deepDive"]').checked,
+          aiReview: row.querySelector('[data-feature="aiReview"]').checked
+        }
+      };
+      const response = await apiFetch(`/api/admin/users/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(body) });
+      if (!response.ok) return showAuthMessage((await response.json()).error || "Could not update user.", true);
+      showAuthMessage("User access updated.");
+      await loadAdmin();
+    });
+  });
+}
+
+function renderPromos(promos) {
+  promoList.innerHTML = promos.length ? promos.map((p) => `
+    <div class="promo-pill">
+      <strong>${escapeHtml(p.code)}</strong>
+      <span>${escapeHtml(p.discountPercent)}% ${p.active ? "active" : "inactive"}</span>
+      <button type="button" class="danger" data-code="${escapeHtml(p.code)}">Delete</button>
+    </div>
+  `).join("") : `<p class="fine-print">No promo codes yet.</p>`;
+  promoList.querySelectorAll("button").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await apiFetch(`/api/admin/promos/${encodeURIComponent(button.dataset.code)}`, { method: "DELETE" });
+      await loadAdmin();
+    });
+  });
+}
 
 function buildSubmissionBody() {
   const fileInput = form.querySelector('input[type="file"]');
