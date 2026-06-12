@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: capital-compass
+    runtime: node
+    plan: starter
+    region: singapore
+    branch: main
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
+    disk:
+      name: capital-compass-work
+      mountPath: /opt/render/project/src/work
+      sizeGB: 5
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: CAPITAL_COMPASS_SECURE_COOKIE
+        value: "1"
+      - key: CAPITAL_COMPASS_PAYMENT_LINK
+        sync: false
+      - key: CAPITAL_COMPASS_OWNER_EMAIL
+        sync: false
+      - key: CAPITAL_COMPASS_OWNER_PASSWORD
+        sync: false

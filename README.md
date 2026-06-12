@@ -72,6 +72,14 @@ CapitalCompass is structured for three monetization paths:
 
 The app includes local signup/login, salted `scrypt` password hashing, httpOnly session cookies, CSRF protection for mutations, admin-only user controls, premium feature gating, and a configurable hosted payment link. Set `CAPITAL_COMPASS_PAYMENT_LINK` to your live Stripe Payment Link or update it from the admin console. The first user to sign up becomes the local admin owner; alternatively set `CAPITAL_COMPASS_OWNER_EMAIL` and `CAPITAL_COMPASS_OWNER_PASSWORD` before startup to bootstrap an owner account.
 
+## Publish for Monetization
+
+Deploy the monetized app as a backend web service, not GitHub Pages. The repo includes a Render Blueprint:
+
+[Deploy CapitalCompass on Render](https://render.com/deploy?repo=https://github.com/nishantsprabhakar/CapitalCompass)
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for the production setup, required environment variables, payment-link setup, and admin monetization workflow.
+
 ## Security Positioning
 
 CapitalCompass is local-first. It is designed for confidential deal materials that should not be uploaded into a generic hosted AI workspace. Uploaded IC templates are kept separate from company diligence materials and are used only for presentation styling.
