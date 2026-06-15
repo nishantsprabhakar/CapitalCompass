@@ -30,6 +30,7 @@ const OUTPUT_DIR = path.join(__dirname, "outputs");
 const UPLOAD_DIR = path.join(WORK_DIR, "uploads");
 const DEFAULT_TEMPLATE = path.join(WORK_DIR, "Pixxel Analysis_working v2.pptx");
 const AUTH_STORE = path.join(WORK_DIR, "auth-store.json");
+const PIPELINE_STORE = path.join(WORK_DIR, "deal-pipeline.json");
 const PORT = Number(process.env.PORT || 4174);
 const DEFAULT_PAYMENT_LINK = process.env.CAPITAL_COMPASS_PAYMENT_LINK || "https://dashboard.stripe.com/payment-links";
 
@@ -53,6 +54,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "POST" && url.pathname === "/api/logout") return handleLogout(req, res);
     if (req.method === "GET" && url.pathname === "/api/payment-link") return handlePaymentLink(req, res, url);
     if (url.pathname.startsWith("/api/admin/")) return handleAdmin(req, res, url);
+    if (url.pathname.startsWith("/api/pipeline")) return handlePipeline(req, res, url);
     if (req.method === "GET" && url.pathname === "/api/template") return json(res, await inspectTemplate(DEFAULT_TEMPLATE));
     if (req.method === "GET" && url.pathname === "/api/health") return json(res, platformHealth());
     if (req.method === "GET" && url.pathname === "/api/platform-readiness") return json(res, platformReadinessModel());
@@ -312,6 +314,77 @@ async function handleResearch(req, res) {
   json(res, { results });
 }
 
+async function handlePipeline(req, res, url) {
+  const user = await requireAuth(req, res);
+  if (!user) return;
+  const parts = url.pathname.split("/").filter(Boolean);
+  const ownerEmail = resolvePipelineOwner(user, url.searchParams.get("ownerEmail") || "");
+
+  if (req.method === "GET" && parts.length === 2) {
+    const store = await loadPipelineStore();
+    const deals = store.deals.filter((d) => normalizeEmail(d.ownerEmail) === ownerEmail);
+    return json(res, { ownerEmail, deals: deals.sort(sortPipelineDeals), summary: pipelineSummary(deals) });
+  }
+
+  if (!["GET", "HEAD"].includes(req.method) && !verifyCsrf(req, res, user)) return;
+
+  if (req.method === "POST" && parts[2] === "import") {
+    const contentType = req.headers["content-type"] || "";
+    if (!contentType.includes("multipart/form-data")) return json(res, { error: "Upload an .xlsx workbook." }, 400);
+    const body = await readBody(req);
+    const boundary = contentType.match(/boundary=(.+)$/)?.[1];
+    if (!boundary) return json(res, { error: "Missing multipart boundary." }, 400);
+    const { fields, files } = await parseMultipart(body, boundary);
+    const upload = files.find((f) => /\.xlsx$/i.test(f.name || f.path));
+    if (!upload) return json(res, { error: "No .xlsx file found." }, 400);
+    const targetOwner = resolvePipelineOwner(user, fields.ownerEmail || ownerEmail || "nishant.p@skegen.com");
+    const deals = await parseDealFunnelWorkbook(await fs.readFile(upload.path), targetOwner);
+    const store = await loadPipelineStore();
+    const existing = new Map(store.deals.map((d) => [`${normalizeEmail(d.ownerEmail)}|${slug(d.company)}|${clean(d.stage)}`, d]));
+    let imported = 0;
+    for (const deal of deals) {
+      const key = `${normalizeEmail(deal.ownerEmail)}|${slug(deal.company)}|${clean(deal.stage)}`;
+      const previous = existing.get(key);
+      if (previous) Object.assign(previous, { ...deal, id: previous.id, createdAt: previous.createdAt, updatedAt: new Date().toISOString() });
+      else {
+        store.deals.push(deal);
+        imported += 1;
+      }
+    }
+    await savePipelineStore(store);
+    const scoped = store.deals.filter((d) => normalizeEmail(d.ownerEmail) === targetOwner);
+    return json(res, { ownerEmail: targetOwner, imported, total: scoped.length, deals: scoped.sort(sortPipelineDeals), summary: pipelineSummary(scoped) });
+  }
+
+  if (req.method === "POST" && parts[2] === "deals") {
+    const payload = await readJson(req);
+    const targetOwner = resolvePipelineOwner(user, payload.ownerEmail || ownerEmail);
+    const deal = normalizePipelineDeal(payload, targetOwner);
+    const store = await loadPipelineStore();
+    store.deals.push(deal);
+    await savePipelineStore(store);
+    return json(res, { deal });
+  }
+
+  if (parts[2] === "deals" && parts[3]) {
+    const store = await loadPipelineStore();
+    const deal = store.deals.find((d) => d.id === parts[3] && normalizeEmail(d.ownerEmail) === ownerEmail);
+    if (!deal) return json(res, { error: "Deal not found." }, 404);
+    if (req.method === "PATCH") {
+      Object.assign(deal, normalizePipelineDeal({ ...deal, ...(await readJson(req)), id: deal.id, createdAt: deal.createdAt }, ownerEmail), { updatedAt: new Date().toISOString() });
+      await savePipelineStore(store);
+      return json(res, { deal });
+    }
+    if (req.method === "DELETE") {
+      store.deals = store.deals.filter((d) => d.id !== deal.id);
+      await savePipelineStore(store);
+      return json(res, { ok: true });
+    }
+  }
+
+  return json(res, { error: "Pipeline endpoint not found." }, 404);
+}
+
 async function buildAiReview(fields, analysis) {
   const provider = clean(fields.aiProvider || "");
   const apiKey = String(fields.aiApiKey || "").trim();
@@ -550,6 +623,70 @@ async function extractXlsxText(buf) {
     }
   }
   return rows.join(" ");
+}
+
+async function parseDealFunnelWorkbook(buf, ownerEmail) {
+  const sheets = await readXlsxSheets(buf);
+  const selected = sheets.find((s) => /deal funnel/i.test(s.name)) || sheets[0];
+  if (!selected) return [];
+  const rows = selected.rows.filter((r) => r.some((c) => cleanCell(c)));
+  const headerIndex = rows.findIndex((row) => row.some((c) => /^company$/i.test(cleanCell(c))) && row.some((c) => /sector/i.test(cleanCell(c))));
+  if (headerIndex < 0) return [];
+  const headers = rows[headerIndex].map(canonicalPipelineHeader);
+  return rows.slice(headerIndex + 1)
+    .map((row) => {
+      const raw = {};
+      headers.forEach((key, idx) => { if (key) raw[key] = row[idx]; });
+      return normalizePipelineDeal(raw, ownerEmail, "excel");
+    })
+    .filter((d) => d.company && !/^[-—]$/.test(d.company));
+}
+
+async function readXlsxSheets(buf) {
+  const zip = await JSZip.loadAsync(buf);
+  const shared = [];
+  const ss = zip.file("xl/sharedStrings.xml");
+  if (ss) {
+    const xml = await ss.async("text");
+    for (const si of xml.matchAll(/<si[^>]*>([\s\S]*?)<\/si>/g)) {
+      shared.push([...si[1].matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map((m) => decodeHtml(m[1])).join(""));
+    }
+  }
+  const workbookXml = zip.file("xl/workbook.xml") ? await zip.file("xl/workbook.xml").async("text") : "";
+  const relsXml = zip.file("xl/_rels/workbook.xml.rels") ? await zip.file("xl/_rels/workbook.xml.rels").async("text") : "";
+  const rels = {};
+  for (const rel of relsXml.matchAll(/<Relationship[^>]*Id="([^"]+)"[^>]*Target="([^"]+)"/g)) rels[rel[1]] = rel[2];
+  const sheetRefs = [...workbookXml.matchAll(/<sheet[^>]*name="([^"]+)"[^>]*r:id="([^"]+)"/g)].map((m) => ({
+    name: decodeHtml(m[1]),
+    path: `xl/${(rels[m[2]] || "").replace(/^\/?xl\//, "")}`
+  })).filter((s) => zip.file(s.path));
+  const fallback = Object.keys(zip.files).filter((n) => /^xl\/worksheets\/sheet\d+\.xml$/.test(n)).sort(naturalSort).map((pathName, i) => ({ name: `sheet${i + 1}`, path: pathName }));
+  const refs = sheetRefs.length ? sheetRefs : fallback;
+  const sheets = [];
+  for (const ref of refs) {
+    const xmlText = await zip.file(ref.path).async("text");
+    const rows = [];
+    for (const rowMatch of xmlText.matchAll(/<row[^>]*>([\s\S]*?)<\/row>/g)) {
+      const row = [];
+      for (const cell of rowMatch[1].matchAll(/<c([^>]*)>([\s\S]*?)<\/c>/g)) {
+        const attrs = cell[1];
+        const body = cell[2];
+        const refMatch = attrs.match(/r="([A-Z]+)(\d+)"/);
+        const colIndex = refMatch ? lettersToCol(refMatch[1]) : row.length;
+        const type = attrs.match(/t="([^"]+)"/)?.[1] || "";
+        let value = "";
+        if (type === "inlineStr") value = decodeHtml(body.match(/<t[^>]*>([\s\S]*?)<\/t>/)?.[1] || "");
+        else {
+          const raw = body.match(/<v>([\s\S]*?)<\/v>/)?.[1] || "";
+          value = type === "s" ? (shared[Number(raw)] || "") : raw;
+        }
+        row[colIndex] = value;
+      }
+      rows.push(row);
+    }
+    sheets.push({ name: ref.name, rows });
+  }
+  return sheets;
 }
 
 async function inspectTemplate(templatePath) {
@@ -1759,6 +1896,95 @@ function naturalSort(a, b) { return a.localeCompare(b, undefined, { numeric: tru
 function normalizeEmail(v) { return String(v || "").trim().toLowerCase().slice(0, 180); }
 function sha256(v) { return crypto.createHash("sha256").update(String(v)).digest("hex"); }
 function clamp(v, min, max) { return Math.min(max, Math.max(min, Number.isFinite(v) ? v : min)); }
+function cleanCell(v) { return String(v ?? "").replace(/\s+/g, " ").trim(); }
+function lettersToCol(letters) { return String(letters).split("").reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0) - 1; }
+function canonicalPipelineHeader(value) {
+  const h = cleanCell(value).toLowerCase().replace(/[\n\r]+/g, " ");
+  if (h === "#" || h === "no") return "serial";
+  if (h === "company") return "company";
+  if (h === "sector") return "sector";
+  if (/company brief|brief|description/.test(h)) return "brief";
+  if (/revenue/.test(h)) return "revenue";
+  if (/ebitda margin|margin/.test(h)) return "margin";
+  if (/ebitda/.test(h)) return "ebitda";
+  if (/pat/.test(h)) return "pat";
+  if (/debt/.test(h)) return "debt";
+  if (/investment ask|ask/.test(h)) return "ask";
+  if (/current.*funnel stage|funnel stage|stage/.test(h)) return "stage";
+  if (/funnel.*status|status/.test(h)) return "status";
+  if (/rejection.*stage/.test(h)) return "rejectionStage";
+  if (/rejection.*reason/.test(h)) return "rejectionReason";
+  if (/notes|commentary/.test(h)) return "notes";
+  return "";
+}
+function parsePipelineNumber(value) {
+  const text = cleanCell(value);
+  if (!text || /^[-—]$/.test(text)) return "";
+  const number = Number(text.replace(/,/g, "").replace(/[^\d.-]/g, ""));
+  return Number.isFinite(number) ? number : text;
+}
+function normalizePipelineDeal(input, ownerEmail, source = "manual") {
+  const now = new Date().toISOString();
+  const revenue = parsePipelineNumber(input.revenue);
+  const ebitda = parsePipelineNumber(input.ebitda);
+  const margin = input.margin !== undefined && input.margin !== "" ? parsePipelineNumber(input.margin) : (typeof revenue === "number" && typeof ebitda === "number" && revenue ? ebitda / revenue : "");
+  return {
+    id: input.id || crypto.randomBytes(8).toString("hex"),
+    ownerEmail: normalizeEmail(ownerEmail || input.ownerEmail || "nishant.p@skegen.com"),
+    company: clean(input.company || ""),
+    sector: clean(input.sector || ""),
+    brief: normalize(input.brief || "").slice(0, 2400),
+    revenue,
+    ebitda,
+    margin,
+    pat: parsePipelineNumber(input.pat),
+    debt: parsePipelineNumber(input.debt),
+    ask: cleanCell(input.ask || ""),
+    stage: cleanCell(input.stage || "1. Deal Sourcing"),
+    status: cleanCell(input.status || "Active"),
+    rejectionStage: cleanCell(input.rejectionStage || "—"),
+    rejectionReason: cleanCell(input.rejectionReason || "—"),
+    notes: normalize(input.notes || "").slice(0, 1600),
+    source,
+    createdAt: input.createdAt || now,
+    updatedAt: now
+  };
+}
+async function loadPipelineStore() {
+  try {
+    const parsed = JSON.parse(await fs.readFile(PIPELINE_STORE, "utf8"));
+    return { deals: Array.isArray(parsed.deals) ? parsed.deals : [] };
+  } catch {
+    return { deals: [] };
+  }
+}
+async function savePipelineStore(store) {
+  const tmp = `${PIPELINE_STORE}.tmp`;
+  await fs.writeFile(tmp, JSON.stringify({ deals: store.deals || [] }, null, 2));
+  await fs.rename(tmp, PIPELINE_STORE);
+}
+function resolvePipelineOwner(user, requested) {
+  const preferred = normalizeEmail(requested);
+  if (user.role === "admin" && preferred) return preferred;
+  return normalizeEmail(user.email || preferred || "nishant.p@skegen.com");
+}
+function pipelineSummary(deals) {
+  const stages = ["1. Deal Sourcing", "2. Initial Screening", "3. Preliminary DD", "4. IC Approval – Prelim", "5. Full Due Diligence"];
+  const byStage = stages.map((stage) => ({ stage, count: deals.filter((d) => d.stage === stage).length }));
+  const active = deals.filter((d) => /active|progress/i.test(d.status)).length;
+  const rejected = deals.filter((d) => /reject/i.test(d.status)).length;
+  const onHold = deals.filter((d) => /hold/i.test(d.status)).length;
+  const totalRevenue = deals.reduce((sum, d) => sum + (typeof d.revenue === "number" ? d.revenue : 0), 0);
+  const avgMargin = deals.filter((d) => typeof d.margin === "number").reduce((sum, d, _, arr) => sum + d.margin / arr.length, 0);
+  return { total: deals.length, active, rejected, onHold, byStage, totalRevenue, avgMargin: Number.isFinite(avgMargin) ? avgMargin : 0 };
+}
+function sortPipelineDeals(a, b) {
+  return stageRank(a.stage) - stageRank(b.stage) || String(a.company).localeCompare(String(b.company));
+}
+function stageRank(stage) {
+  const n = Number(String(stage || "").match(/^\d+/)?.[0] || 99);
+  return Number.isFinite(n) ? n : 99;
+}
 function hashPassword(password) {
   const salt = crypto.randomBytes(16).toString("hex");
   const hash = crypto.scryptSync(String(password), salt, 64).toString("hex");

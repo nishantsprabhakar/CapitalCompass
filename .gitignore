@@ -10,3 +10,5 @@ outputs/*.xlsx
 work/template-assets/
 work/auth-store.json
 work/auth-store.json.tmp
+work/deal-pipeline.json
+work/deal-pipeline.json.tmp

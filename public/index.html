@@ -79,6 +79,7 @@
       </div>
       <nav>
         <a href="#inputs" class="active">Inputs</a>
+        <a href="#pipeline">Deal pipeline</a>
         <a href="#screen">Initial screen</a>
         <a href="#enterprise">Enterprise review</a>
         <a href="#deep">Deep dive</a>
@@ -123,6 +124,65 @@
           <span>Risk-led</span>
           <span>Office-native</span>
         </div>
+      </section>
+
+      <section class="panel pipeline-panel reveal" id="pipeline">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Deal pipeline</p>
+            <h2>Interactive PE funnel tracker</h2>
+          </div>
+          <button id="refreshPipeline" class="secondary" type="button">Refresh pipeline</button>
+        </div>
+        <div class="pipeline-layout">
+          <div class="pipeline-visual">
+            <div class="funnel-stage" data-stage="1. Deal Sourcing"><span>1</span><strong>Deal Sourcing</strong><em id="stage1Count">0</em></div>
+            <div class="funnel-stage" data-stage="2. Initial Screening"><span>2</span><strong>Initial Screening</strong><em id="stage2Count">0</em></div>
+            <div class="funnel-stage" data-stage="3. Preliminary DD"><span>3</span><strong>Preliminary DD</strong><em id="stage3Count">0</em></div>
+            <div class="funnel-stage" data-stage="4. IC Approval – Prelim"><span>4</span><strong>IC Approval</strong><em id="stage4Count">0</em></div>
+            <div class="funnel-stage" data-stage="5. Full Due Diligence"><span>5</span><strong>Full DD</strong><em id="stage5Count">0</em></div>
+          </div>
+          <div class="pipeline-summary" id="pipelineSummary">
+            <article><span>Total deals</span><strong>-</strong></article>
+            <article><span>Active / DD</span><strong>-</strong></article>
+            <article><span>Rejected</span><strong>-</strong></article>
+            <article><span>On hold</span><strong>-</strong></article>
+          </div>
+        </div>
+        <div class="pipeline-actions">
+          <form id="pipelineImportForm" class="pipeline-import">
+            <label>Owner email
+              <input name="ownerEmail" id="pipelineOwnerEmail" value="nishant.p@skegen.com">
+            </label>
+            <label class="drop">
+              <span>Upload DealFunnel Excel format</span>
+              <input name="pipelineFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
+            </label>
+            <button class="primary" type="submit">Import Excel</button>
+          </form>
+          <form id="pipelineManualForm" class="pipeline-manual">
+            <input name="company" placeholder="Company" required>
+            <input name="sector" placeholder="Sector">
+            <input name="revenue" type="number" step="0.01" placeholder="Revenue Rs cr">
+            <input name="ebitda" type="number" step="0.01" placeholder="EBITDA Rs cr">
+            <input name="ask" placeholder="Investment ask">
+            <select name="stage">
+              <option>1. Deal Sourcing</option>
+              <option>2. Initial Screening</option>
+              <option>3. Preliminary DD</option>
+              <option>4. IC Approval – Prelim</option>
+              <option>5. Full Due Diligence</option>
+            </select>
+            <select name="status">
+              <option>Active</option>
+              <option>On Hold</option>
+              <option>Rejected</option>
+            </select>
+            <textarea name="brief" rows="2" placeholder="Company brief / latest note"></textarea>
+            <button class="primary" type="submit">Add deal</button>
+          </form>
+        </div>
+        <div id="pipelineDeals" class="pipeline-deals">Login and refresh to load your local pipeline.</div>
       </section>
 
       <form id="dealForm" class="panel command-panel reveal" enctype="multipart/form-data">

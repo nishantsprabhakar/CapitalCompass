@@ -17,9 +17,16 @@ const thesis = document.getElementById("thesis");
 const summary = document.getElementById("summary");
 const templateBox = document.getElementById("templateBox");
 const enterpriseReview = document.getElementById("enterpriseReview");
+const pipelineOwnerEmail = document.getElementById("pipelineOwnerEmail");
+const pipelineImportForm = document.getElementById("pipelineImportForm");
+const pipelineManualForm = document.getElementById("pipelineManualForm");
+const pipelineDeals = document.getElementById("pipelineDeals");
+const pipelineSummary = document.getElementById("pipelineSummary");
+const refreshPipeline = document.getElementById("refreshPipeline");
 let currentUser = null;
 let csrfToken = "";
 let currentPaymentLink = "#";
+let currentPipelineOwner = "nishant.p@skegen.com";
 
 initInterfaceEffects();
 initAuth();
@@ -63,6 +70,29 @@ logoutButton.addEventListener("click", async () => {
 });
 
 promoCode.addEventListener("input", () => refreshPaymentLink());
+refreshPipeline.addEventListener("click", () => loadPipeline());
+pipelineImportForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!currentUser) return showAuthMessage("Please login before importing a pipeline.", true);
+  const data = new FormData(pipelineImportForm);
+  const response = await apiFetch(`/api/pipeline/import?ownerEmail=${encodeURIComponent(pipelineOwnerEmail.value || currentPipelineOwner)}`, { method: "POST", body: data });
+  const result = await response.json();
+  if (!response.ok) return renderPipelineError(result.error || "Pipeline import failed.");
+  pipelineImportForm.reset();
+  pipelineOwnerEmail.value = result.ownerEmail || currentPipelineOwner;
+  renderPipeline(result);
+});
+pipelineManualForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!currentUser) return showAuthMessage("Please login before adding a deal.", true);
+  const body = Object.fromEntries(new FormData(pipelineManualForm).entries());
+  body.ownerEmail = pipelineOwnerEmail.value || currentPipelineOwner;
+  const response = await apiFetch(`/api/pipeline/deals?ownerEmail=${encodeURIComponent(body.ownerEmail)}`, { method: "POST", body: JSON.stringify(body) });
+  const result = await response.json();
+  if (!response.ok) return renderPipelineError(result.error || "Could not add deal.");
+  pipelineManualForm.reset();
+  await loadPipeline();
+});
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -149,9 +179,15 @@ function showWorkspace() {
   authHome.classList.add("hidden");
   appShell.classList.remove("hidden");
   const access = currentUser.featureAccess || {};
+  currentPipelineOwner = currentUser.role === "admin" ? "nishant.p@skegen.com" : currentUser.email;
+  if (pipelineOwnerEmail) {
+    pipelineOwnerEmail.value = currentPipelineOwner;
+    pipelineOwnerEmail.disabled = currentUser.role !== "admin";
+  }
   accountName.textContent = `${currentUser.name || currentUser.email}`;
   accountAccess.textContent = `${currentUser.role.toUpperCase()} | ${currentUser.plan.toUpperCase()} plan | Deep dive ${access.deepDive ? "enabled" : "locked"} | AI review ${access.aiReview ? "enabled" : "locked"}`;
   adminNav.classList.toggle("hidden", currentUser.role !== "admin");
+  loadPipeline();
 }
 
 function showAuthMessage(message, isError = false) {
@@ -168,6 +204,85 @@ async function refreshPaymentLink() {
   } catch {}
   if (paymentLink) paymentLink.href = currentPaymentLink || "#";
   if (premiumButton) premiumButton.href = currentPaymentLink || "#";
+}
+
+async function loadPipeline() {
+  if (!currentUser) return;
+  const owner = pipelineOwnerEmail?.value || currentPipelineOwner;
+  const response = await apiFetch(`/api/pipeline?ownerEmail=${encodeURIComponent(owner)}`);
+  const data = await response.json();
+  if (!response.ok) return renderPipelineError(data.error || "Could not load pipeline.");
+  currentPipelineOwner = data.ownerEmail || owner;
+  if (pipelineOwnerEmail) pipelineOwnerEmail.value = currentPipelineOwner;
+  renderPipeline(data);
+}
+
+function renderPipeline(data) {
+  const deals = data.deals || [];
+  const s = data.summary || {};
+  pipelineSummary.innerHTML = [
+    pipelineMetric("Total deals", s.total ?? 0),
+    pipelineMetric("Active / DD", s.active ?? 0),
+    pipelineMetric("Rejected", s.rejected ?? 0),
+    pipelineMetric("On hold", s.onHold ?? 0)
+  ].join("");
+  (s.byStage || []).forEach((stage, idx) => {
+    const el = document.getElementById(`stage${idx + 1}Count`);
+    if (el) {
+      el.textContent = stage.count;
+      el.closest(".funnel-stage")?.style.setProperty("--stage-scale", String(Math.max(.18, Math.min(1, (stage.count || 0) / Math.max(1, s.total || 1)))));
+    }
+  });
+  if (!deals.length) {
+    pipelineDeals.innerHTML = `<div class="pipeline-empty">No deals yet. Upload the DealFunnel workbook or add a company manually.</div>`;
+    return;
+  }
+  pipelineDeals.innerHTML = deals.map((d, idx) => `
+    <article class="deal-card ${pipelineStatusClass(d.status)}" style="--delay:${idx * 35}ms" data-deal-id="${escapeHtml(d.id)}">
+      <div>
+        <span>${escapeHtml(d.stage || "Pipeline")}</span>
+        <h3>${escapeHtml(d.company)}</h3>
+        <p>${escapeHtml(d.sector || "Sector not tagged")}</p>
+      </div>
+      <div class="deal-metrics">
+        <strong>${formatPipelineValue(d.revenue)}</strong><span>Revenue</span>
+        <strong>${formatPipelineValue(d.ebitda)}</strong><span>EBITDA</span>
+        <strong>${typeof d.margin === "number" ? `${(d.margin * 100).toFixed(1)}%` : escapeHtml(d.margin || "-")}</strong><span>Margin</span>
+      </div>
+      <p class="deal-brief">${escapeHtml(d.brief || d.notes || "No brief logged.")}</p>
+      <div class="deal-foot">
+        <strong>${escapeHtml(d.status || "Active")}</strong>
+        <span>${escapeHtml(d.ask || "Ask TBD")}</span>
+        <button type="button" class="danger" data-delete-deal="${escapeHtml(d.id)}">Delete</button>
+      </div>
+    </article>
+  `).join("");
+  pipelineDeals.querySelectorAll("[data-delete-deal]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const response = await apiFetch(`/api/pipeline/deals/${encodeURIComponent(button.dataset.deleteDeal)}?ownerEmail=${encodeURIComponent(currentPipelineOwner)}`, { method: "DELETE" });
+      if (!response.ok) return renderPipelineError((await response.json()).error || "Could not delete deal.");
+      await loadPipeline();
+    });
+  });
+}
+
+function pipelineMetric(label, value) {
+  return `<article><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></article>`;
+}
+
+function pipelineStatusClass(status) {
+  if (/reject/i.test(status || "")) return "deal-rejected";
+  if (/hold/i.test(status || "")) return "deal-hold";
+  return "deal-active";
+}
+
+function formatPipelineValue(value) {
+  if (typeof value === "number") return value >= 1000 ? `${Math.round(value).toLocaleString()} cr` : `${value.toLocaleString(undefined, { maximumFractionDigits: 1 })} cr`;
+  return escapeHtml(value || "-");
+}
+
+function renderPipelineError(message) {
+  pipelineDeals.innerHTML = `<div class="pipeline-empty error">${escapeHtml(message)}</div>`;
 }
 
 function buildSubmissionBody() {

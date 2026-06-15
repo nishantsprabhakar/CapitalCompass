@@ -60,6 +60,10 @@ The score separation is deliberate: platform architecture readiness measures wha
 
 CapitalCompass can optionally call an AI API during a diligence run. Supported modes are OpenAI-compatible chat completions, Groq chat completions, Anthropic Messages, Gemini `generateContent`, and custom OpenAI-compatible JSON endpoints. API keys are sent only from the browser to the local server for the current run and are not stored in generated outputs.
 
+## Deal Pipeline
+
+CapitalCompass includes a local deal pipeline module for logged-in users. Users can upload the `DealFunnel` Excel format or add deals manually. Pipeline data is stored locally in `work/deal-pipeline.json`, grouped by owner email, and is not committed to git. Admin users can map an imported workbook to another owner email such as `nishant.p@skegen.com`.
+
 ## Commercial Packaging
 
 CapitalCompass is structured for three monetization paths:

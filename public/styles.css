@@ -188,6 +188,184 @@ body {
 .account-bar h2 { font-size: 22px; }
 .account-bar p { color: #475467; margin-top: 5px; }
 
+.pipeline-panel {
+  border-top: 3px solid var(--cyan);
+}
+.pipeline-layout {
+  display: grid;
+  grid-template-columns: minmax(340px, .9fr) minmax(260px, .38fr);
+  gap: 18px;
+  align-items: stretch;
+}
+.pipeline-visual {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(7, 26, 51, .96), rgba(12, 69, 94, .9)),
+    linear-gradient(90deg, rgba(217, 164, 65, .12), transparent);
+  overflow: hidden;
+}
+.funnel-stage {
+  --stage-scale: .2;
+  min-height: 62px;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 52px;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 14px;
+  color: white;
+  border: 1px solid rgba(160, 211, 255, .22);
+  border-radius: 8px;
+  background:
+    linear-gradient(90deg, rgba(63, 215, 255, calc(.09 + var(--stage-scale) * .2)), rgba(217, 164, 65, .08)),
+    rgba(255,255,255,.04);
+  transform: scaleX(calc(.82 + var(--stage-scale) * .18));
+  transform-origin: left center;
+  animation: funnelSlide .55s ease both;
+}
+.funnel-stage:nth-child(2) { animation-delay: .05s; }
+.funnel-stage:nth-child(3) { animation-delay: .1s; }
+.funnel-stage:nth-child(4) { animation-delay: .15s; }
+.funnel-stage:nth-child(5) { animation-delay: .2s; }
+.funnel-stage span {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(63, 215, 255, .16);
+  border: 1px solid rgba(63, 215, 255, .34);
+  font-weight: 900;
+}
+.funnel-stage strong {
+  font-size: 15px;
+}
+.funnel-stage em {
+  justify-self: end;
+  font-style: normal;
+  font-size: 26px;
+  font-weight: 900;
+  color: var(--gold);
+}
+@keyframes funnelSlide {
+  from { opacity: 0; transform: translateX(-16px) scaleX(.75); }
+}
+.pipeline-summary {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+.pipeline-summary article {
+  padding: 14px;
+  border: 1px solid #cbd9ea;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #fff, #f6faff);
+}
+.pipeline-summary span,
+.deal-card span {
+  color: #94650f;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  font-size: 10px;
+  font-weight: 900;
+}
+.pipeline-summary strong {
+  display: block;
+  margin-top: 6px;
+  color: var(--navy);
+  font-size: 30px;
+}
+.pipeline-actions {
+  display: grid;
+  grid-template-columns: minmax(320px, .8fr) minmax(0, 1.2fr);
+  gap: 14px;
+  margin-top: 16px;
+}
+.pipeline-import,
+.pipeline-manual {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid #cbd9ea;
+  border-radius: 8px;
+  background: rgba(255,255,255,.78);
+}
+.pipeline-manual {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.pipeline-manual textarea,
+.pipeline-manual button {
+  grid-column: span 2;
+}
+.pipeline-deals {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+.deal-card {
+  display: grid;
+  gap: 12px;
+  padding: 15px;
+  border: 1px solid #d8e4f0;
+  border-left: 5px solid var(--cyan);
+  border-radius: 8px;
+  background: linear-gradient(180deg, #fff, #f8fbff);
+  animation: dealLift .45s ease both;
+  animation-delay: var(--delay);
+}
+.deal-card.deal-rejected { border-left-color: var(--red); }
+.deal-card.deal-hold { border-left-color: var(--gold); }
+.deal-card h3 {
+  margin: 5px 0 3px;
+  color: var(--navy);
+  font-size: 18px;
+}
+.deal-card p {
+  color: #475467;
+  line-height: 1.45;
+  font-size: 13px;
+}
+.deal-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.deal-metrics strong {
+  display: block;
+  color: #0b2a4b;
+}
+.deal-metrics span {
+  display: block;
+}
+.deal-brief {
+  max-height: 72px;
+  overflow: hidden;
+}
+.deal-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+.pipeline-empty {
+  grid-column: 1 / -1;
+  padding: 18px;
+  border: 1px dashed #a8bbcf;
+  border-radius: 8px;
+  color: #475467;
+  background: rgba(255,255,255,.72);
+}
+.pipeline-empty.error {
+  color: var(--red);
+  border-color: rgba(215, 75, 75, .5);
+}
+@keyframes dealLift {
+  from { opacity: 0; transform: translateY(14px); }
+}
+
 .admin-page {
   background:
     linear-gradient(135deg, rgba(7, 26, 51, .08), transparent 35%),
@@ -1298,7 +1476,8 @@ details summary {
   .admin-shell { grid-template-columns: 1fr; }
   .admin-side { position: static; height: auto; }
   .admin-hero { display: grid; }
-  .admin-kpis, .admin-two-col { grid-template-columns: 1fr; }
+  .admin-kpis, .admin-two-col, .pipeline-layout, .pipeline-actions, .pipeline-manual, .pipeline-deals { grid-template-columns: 1fr; }
+  .pipeline-manual textarea, .pipeline-manual button { grid-column: auto; }
   .app { grid-template-columns: 1fr; }
   .side { position: static; height: auto; }
   .account-bar { display: grid; }
