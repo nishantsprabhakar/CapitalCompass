@@ -23,10 +23,18 @@ const pipelineManualForm = document.getElementById("pipelineManualForm");
 const pipelineDeals = document.getElementById("pipelineDeals");
 const pipelineSummary = document.getElementById("pipelineSummary");
 const refreshPipeline = document.getElementById("refreshPipeline");
+const pipelineSearch = document.getElementById("pipelineSearch");
+const pipelineStageFilter = document.getElementById("pipelineStageFilter");
+const pipelineStatusFilter = document.getElementById("pipelineStatusFilter");
+const pipelineStatusChart = document.getElementById("pipelineStatusChart");
+const pipelineStageChart = document.getElementById("pipelineStageChart");
+const pipelineSectorChart = document.getElementById("pipelineSectorChart");
+const pipelineEconomicsChart = document.getElementById("pipelineEconomicsChart");
 let currentUser = null;
 let csrfToken = "";
 let currentPaymentLink = "#";
 let currentPipelineOwner = "nishant.p@skegen.com";
+let pipelineState = { deals: [], summary: {}, ownerEmail: "" };
 
 initInterfaceEffects();
 initAuth();
@@ -71,6 +79,17 @@ logoutButton.addEventListener("click", async () => {
 
 promoCode.addEventListener("input", () => refreshPaymentLink());
 refreshPipeline.addEventListener("click", () => loadPipeline());
+[pipelineSearch, pipelineStageFilter, pipelineStatusFilter].forEach((control) => {
+  control?.addEventListener("input", () => renderPipeline(pipelineState));
+  control?.addEventListener("change", () => renderPipeline(pipelineState));
+});
+document.querySelectorAll(".funnel-stage").forEach((stage) => {
+  stage.addEventListener("click", () => {
+    const value = stage.dataset.stage || "";
+    pipelineStageFilter.value = pipelineStageFilter.value === value ? "" : value;
+    renderPipeline(pipelineState);
+  });
+});
 pipelineImportForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!currentUser) return showAuthMessage("Please login before importing a pipeline.", true);
@@ -218,23 +237,30 @@ async function loadPipeline() {
 }
 
 function renderPipeline(data) {
-  const deals = data.deals || [];
-  const s = data.summary || {};
+  pipelineState = data || pipelineState;
+  const allDeals = pipelineState.deals || [];
+  const deals = filterPipelineDeals(allDeals);
+  const s = buildPipelineSummary(deals);
   pipelineSummary.innerHTML = [
     pipelineMetric("Total deals", s.total ?? 0),
     pipelineMetric("Active / DD", s.active ?? 0),
     pipelineMetric("Rejected", s.rejected ?? 0),
-    pipelineMetric("On hold", s.onHold ?? 0)
+    pipelineMetric("On hold", s.onHold ?? 0),
+    pipelineMetric("Avg margin", `${((s.avgMargin || 0) * 100).toFixed(1)}%`),
+    pipelineMetric("Revenue pool", `${Math.round(s.totalRevenue || 0).toLocaleString()} cr`)
   ].join("");
   (s.byStage || []).forEach((stage, idx) => {
     const el = document.getElementById(`stage${idx + 1}Count`);
     if (el) {
       el.textContent = stage.count;
-      el.closest(".funnel-stage")?.style.setProperty("--stage-scale", String(Math.max(.18, Math.min(1, (stage.count || 0) / Math.max(1, s.total || 1)))));
+      const block = el.closest(".funnel-stage");
+      block?.style.setProperty("--stage-scale", String(Math.max(.18, Math.min(1, (stage.count || 0) / Math.max(1, s.total || 1)))));
+      block?.classList.toggle("selected", normalizeStage(pipelineStageFilter.value) === stage.stage);
     }
   });
+  renderPipelineCharts(deals, s);
   if (!deals.length) {
-    pipelineDeals.innerHTML = `<div class="pipeline-empty">No deals yet. Upload the DealFunnel workbook or add a company manually.</div>`;
+    pipelineDeals.innerHTML = `<div class="pipeline-empty">No deals match the current pipeline filters.</div>`;
     return;
   }
   pipelineDeals.innerHTML = deals.map((d, idx) => `
@@ -253,8 +279,13 @@ function renderPipeline(data) {
       <div class="deal-foot">
         <strong>${escapeHtml(d.status || "Active")}</strong>
         <span>${escapeHtml(d.ask || "Ask TBD")}</span>
+        <button type="button" class="secondary" data-analyze-deal="${escapeHtml(d.id)}">Analyze</button>
         <button type="button" class="danger" data-delete-deal="${escapeHtml(d.id)}">Delete</button>
       </div>
+      <details>
+        <summary>Deal notes</summary>
+        <p>${escapeHtml(d.notes || d.rejectionReason || d.brief || "No additional notes.")}</p>
+      </details>
     </article>
   `).join("");
   pipelineDeals.querySelectorAll("[data-delete-deal]").forEach((button) => {
@@ -264,10 +295,119 @@ function renderPipeline(data) {
       await loadPipeline();
     });
   });
+  pipelineDeals.querySelectorAll("[data-analyze-deal]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const deal = allDeals.find((d) => d.id === button.dataset.analyzeDeal);
+      if (!deal) return;
+      const company = form.querySelector('[name="companyName"]');
+      const sector = form.querySelector('[name="sector"]');
+      if (company) company.value = deal.company || "";
+      if (sector) sector.value = deal.sector || "";
+      document.getElementById("inputs")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  });
 }
 
 function pipelineMetric(label, value) {
   return `<article><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></article>`;
+}
+
+function filterPipelineDeals(deals) {
+  const q = (pipelineSearch?.value || "").trim().toLowerCase();
+  const stage = pipelineStageFilter?.value || "";
+  const status = pipelineStatusFilter?.value || "";
+  return deals.filter((d) => {
+    const haystack = [d.company, d.sector, d.brief, d.notes, d.ask, d.rejectionReason].join(" ").toLowerCase();
+    return (!q || haystack.includes(q)) && (!stage || normalizeStage(d.stage) === normalizeStage(stage)) && (!status || String(d.status || "").toLowerCase() === status.toLowerCase());
+  });
+}
+
+function buildPipelineSummary(deals) {
+  const stages = ["1. Deal Sourcing", "2. Initial Screening", "3. Preliminary DD", "4. IC Approval - Prelim", "5. Full Due Diligence"];
+  const byStage = stages.map((stage) => ({ stage, count: deals.filter((d) => normalizeStage(d.stage) === stage).length }));
+  const active = deals.filter((d) => /active|progress/i.test(d.status || "")).length;
+  const rejected = deals.filter((d) => /reject/i.test(d.status || "")).length;
+  const onHold = deals.filter((d) => /hold/i.test(d.status || "")).length;
+  const totalRevenue = deals.reduce((sum, d) => sum + (typeof d.revenue === "number" ? d.revenue : 0), 0);
+  const marginDeals = deals.filter((d) => typeof d.margin === "number");
+  const avgMargin = marginDeals.length ? marginDeals.reduce((sum, d) => sum + d.margin, 0) / marginDeals.length : 0;
+  return { total: deals.length, active, rejected, onHold, byStage, totalRevenue, avgMargin };
+}
+
+function renderPipelineCharts(deals, summary) {
+  renderStatusDonut(summary);
+  renderStageBars(summary);
+  renderSectorBars(deals);
+  renderEconomicsChart(deals);
+}
+
+function renderStatusDonut(summary) {
+  const active = summary.active || 0;
+  const rejected = summary.rejected || 0;
+  const hold = summary.onHold || 0;
+  const total = Math.max(1, active + rejected + hold);
+  const activePct = active / total * 100;
+  const rejectedPct = rejected / total * 100;
+  const rejectedEnd = activePct + rejectedPct;
+  pipelineStatusChart.innerHTML = `
+    <div class="donut" style="--active:${activePct};--rejected-end:${rejectedEnd};"></div>
+    <div class="chart-legend">
+      <span><i class="dot active"></i>Active ${active}</span>
+      <span><i class="dot rejected"></i>Rejected ${rejected}</span>
+      <span><i class="dot hold"></i>Hold ${hold}</span>
+    </div>
+  `;
+}
+
+function renderStageBars(summary) {
+  const max = Math.max(1, ...summary.byStage.map((x) => x.count));
+  pipelineStageChart.innerHTML = summary.byStage.map((x, idx) => `
+    <button type="button" class="stage-bar ${pipelineStageFilter.value === x.stage ? "selected" : ""}" data-stage-filter="${escapeHtml(x.stage)}">
+      <span>${idx + 1}</span>
+      <strong>${escapeHtml(x.stage.replace(/^\d+\.\s*/, ""))}</strong>
+      <em style="--bar:${Math.max(4, x.count / max * 100)}%"></em>
+      <b>${x.count}</b>
+    </button>
+  `).join("");
+  pipelineStageChart.querySelectorAll("[data-stage-filter]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const value = button.dataset.stageFilter;
+      pipelineStageFilter.value = normalizeStage(pipelineStageFilter.value) === value ? "" : value;
+      renderPipeline(pipelineState);
+    });
+  });
+}
+
+function renderSectorBars(deals) {
+  const sectors = Object.entries(deals.reduce((acc, d) => {
+    const key = d.sector || "Unclassified";
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {})).sort((a, b) => b[1] - a[1]).slice(0, 6);
+  const max = Math.max(1, ...sectors.map((x) => x[1]));
+  pipelineSectorChart.innerHTML = sectors.length ? sectors.map(([sector, count]) => `
+    <div class="sector-row"><span>${escapeHtml(sector)}</span><em style="--bar:${Math.max(6, count / max * 100)}%"></em><strong>${count}</strong></div>
+  `).join("") : `<p class="fine-print">No sector exposure yet.</p>`;
+}
+
+function renderEconomicsChart(deals) {
+  const economics = deals
+    .filter((d) => typeof d.revenue === "number" || typeof d.ebitda === "number")
+    .sort((a, b) => (b.revenue || 0) - (a.revenue || 0))
+    .slice(0, 8);
+  const max = Math.max(1, ...economics.flatMap((d) => [Math.abs(d.revenue || 0), Math.abs(d.ebitda || 0)]));
+  pipelineEconomicsChart.innerHTML = economics.length ? economics.map((d) => `
+    <div class="econ-row">
+      <span>${escapeHtml(d.company)}</span>
+      <em class="rev" style="--bar:${Math.max(3, Math.abs(d.revenue || 0) / max * 100)}%"></em>
+      <em class="ebitda ${Number(d.ebitda || 0) < 0 ? "negative" : ""}" style="--bar:${Math.max(3, Math.abs(d.ebitda || 0) / max * 100)}%"></em>
+      <strong>${formatPipelineValue(d.revenue)}</strong>
+    </div>
+  `).join("") : `<p class="fine-print">No revenue/EBITDA values yet.</p>`;
+}
+
+function normalizeStage(stage) {
+  return String(stage || "").replace("–", "-").replace(/\s+/g, " ").trim();
 }
 
 function pipelineStatusClass(status) {

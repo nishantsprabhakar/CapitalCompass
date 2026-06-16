@@ -130,16 +130,39 @@
         <div class="section-head">
           <div>
             <p class="eyebrow">Deal pipeline</p>
-            <h2>Interactive PE funnel tracker</h2>
+            <h2>Interactive PE pipeline cockpit</h2>
           </div>
           <button id="refreshPipeline" class="secondary" type="button">Refresh pipeline</button>
+        </div>
+        <div class="pipeline-controls">
+          <label>Search
+            <input id="pipelineSearch" placeholder="Company, sector, note">
+          </label>
+          <label>Stage
+            <select id="pipelineStageFilter">
+              <option value="">All stages</option>
+              <option>1. Deal Sourcing</option>
+              <option>2. Initial Screening</option>
+              <option>3. Preliminary DD</option>
+              <option>4. IC Approval - Prelim</option>
+              <option>5. Full Due Diligence</option>
+            </select>
+          </label>
+          <label>Status
+            <select id="pipelineStatusFilter">
+              <option value="">All status</option>
+              <option>Active</option>
+              <option>On Hold</option>
+              <option>Rejected</option>
+            </select>
+          </label>
         </div>
         <div class="pipeline-layout">
           <div class="pipeline-visual">
             <div class="funnel-stage" data-stage="1. Deal Sourcing"><span>1</span><strong>Deal Sourcing</strong><em id="stage1Count">0</em></div>
             <div class="funnel-stage" data-stage="2. Initial Screening"><span>2</span><strong>Initial Screening</strong><em id="stage2Count">0</em></div>
             <div class="funnel-stage" data-stage="3. Preliminary DD"><span>3</span><strong>Preliminary DD</strong><em id="stage3Count">0</em></div>
-            <div class="funnel-stage" data-stage="4. IC Approval – Prelim"><span>4</span><strong>IC Approval</strong><em id="stage4Count">0</em></div>
+            <div class="funnel-stage" data-stage="4. IC Approval - Prelim"><span>4</span><strong>IC Approval</strong><em id="stage4Count">0</em></div>
             <div class="funnel-stage" data-stage="5. Full Due Diligence"><span>5</span><strong>Full DD</strong><em id="stage5Count">0</em></div>
           </div>
           <div class="pipeline-summary" id="pipelineSummary">
@@ -148,6 +171,24 @@
             <article><span>Rejected</span><strong>-</strong></article>
             <article><span>On hold</span><strong>-</strong></article>
           </div>
+        </div>
+        <div class="pipeline-charts">
+          <article class="chart-card">
+            <div class="card-label">Status mix</div>
+            <div id="pipelineStatusChart" class="donut-chart"></div>
+          </article>
+          <article class="chart-card wide">
+            <div class="card-label">Stage distribution</div>
+            <div id="pipelineStageChart" class="bar-chart"></div>
+          </article>
+          <article class="chart-card">
+            <div class="card-label">Sector exposure</div>
+            <div id="pipelineSectorChart" class="sector-chart"></div>
+          </article>
+          <article class="chart-card wide">
+            <div class="card-label">Revenue vs EBITDA</div>
+            <div id="pipelineEconomicsChart" class="economics-chart"></div>
+          </article>
         </div>
         <div class="pipeline-actions">
           <form id="pipelineImportForm" class="pipeline-import">
@@ -170,7 +211,7 @@
               <option>1. Deal Sourcing</option>
               <option>2. Initial Screening</option>
               <option>3. Preliminary DD</option>
-              <option>4. IC Approval – Prelim</option>
+              <option>4. IC Approval - Prelim</option>
               <option>5. Full Due Diligence</option>
             </select>
             <select name="status">
