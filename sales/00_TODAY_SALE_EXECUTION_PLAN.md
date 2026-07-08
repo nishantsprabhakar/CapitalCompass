@@ -20,6 +20,7 @@ Objective: create competitive buyer tension for a USD 2M minimum acquisition or 
 - Attach the acquisition teaser: `sales/01_ACQUISITION_TEASER.md`.
 - Attach valuation memo: `sales/04_VALUATION_AND_DEAL_TERMS.md`.
 - Keep the source repo available only after NDA or serious buyer qualification.
+- Create the sale-process accounts listed in `sales/06_ACCOUNT_SETUP_RUNBOOK.md`.
 
 ### Hour 1-2: Buyer Shortlist
 
