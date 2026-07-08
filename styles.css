@@ -40,6 +40,19 @@ body {
   border-radius: 12px;
   box-shadow: 0 12px 30px rgba(0,0,0,.32);
 }
+.nav-link {
+  margin-left: auto;
+  color: var(--gold2);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 900;
+}
+.acquire-hero h1 {
+  max-width: 980px;
+}
+.acquire-console .metric strong {
+  font-size: 34px;
+}
 .hero-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(340px, .76fr);
