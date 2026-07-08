@@ -84,6 +84,19 @@ Deploy the monetized app as a backend web service, not GitHub Pages. The repo in
 
 See [DEPLOYMENT.md](DEPLOYMENT.md) for the production setup, required environment variables, payment-link setup, and admin monetization workflow.
 
+## Strategic Sale Package
+
+The repo includes a same-day sale package in `sales/`:
+
+- Sale execution plan
+- Acquisition teaser
+- Strategic buyer target list
+- Outreach emails and call script
+- Valuation and deal terms memo
+- Data room checklist
+
+The public strategic-acquisition page lives at `docs/acquire.html` and is intended for buyer-facing outreach.
+
 ## Security Positioning
 
 CapitalCompass is local-first. It is designed for confidential deal materials that should not be uploaded into a generic hosted AI workspace. Uploaded IC templates are kept separate from company diligence materials and are used only for presentation styling.

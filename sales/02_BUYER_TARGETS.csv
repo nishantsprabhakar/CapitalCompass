@@ -1,0 +1,21 @@
+Tier,Buyer,Strategic Rationale,Likely Contact Function,Initial Ask
+1,Datasite / Grata,Owns dealmaking workflow and private-markets intelligence; CapitalCompass adds IC memo/model generation and local-first PE workflow,Corporate Development / Product,Strategic acquisition or exclusive license
+1,S&P Global Market Intelligence / Capital IQ,Can extend private-markets workflow from data and analytics into diligence execution artifacts,Corporate Development / Private Markets Product,Product acquisition discussion
+1,Morningstar / PitchBook,Private-market database plus workflow; CapitalCompass adds PE diligence automation and Office-native outputs,Corporate Development / PitchBook Product,Strategic tuck-in
+1,AlphaSense,Strong AI search/content platform; CapitalCompass adds structured PE IC workflow and sponsor output engine,Corporate Development / Product,Workflow acquisition
+1,SS&C Intralinks,Data-room and M&A workflow buyer; CapitalCompass adds automated diligence notes, IC memo, model, and pipeline cockpit,Corporate Development / Product,Asset purchase
+1,Intapp DealCloud,CRM/deal workflow platform; CapitalCompass can become diligence-workpaper and IC-prep layer,Corporate Development / DealCloud GM,Product tuck-in
+1,Ansarada,Deals platform with AI workflow; CapitalCompass adds PE-grade memo/model generation and local-first diligence cockpit,CEO / Corporate Development,Strategic acquisition
+2,iDeals,VDR provider seeking workflow differentiation; CapitalCompass adds post-data-room diligence automation,Product / Corporate Development,Strategic partnership then acquisition
+2,Diligent,M&A/governance/workflow buyer; CapitalCompass adds investment evaluation cockpit and controlled outputs,Corporate Development,Product acquisition
+2,CB Insights,Private-company intelligence platform; CapitalCompass adds PE workflow and deliverable generation,Product / Corporate Development,Workflow extension
+2,Tracxn,Private market data provider; CapitalCompass adds diligence execution layer and PE outputs,Leadership / Partnerships,Strategic license
+2,Preqin / BlackRock,Private markets data and analytics; CapitalCompass adds workflow automation for fund/investment teams,Private Markets Product,Strategic partnership
+2,Mergermarket / ION Analytics,M&A intelligence and deal workflow; CapitalCompass adds diligence output automation,Corporate Development / Product,Workflow acquisition
+2,DealRoom,M&A project management/VDR workflows; CapitalCompass adds PE evaluation automation,CEO / Product,Acquisition discussion
+2,Firmex,VDR platform; CapitalCompass adds AI-enabled diligence artifact generation,Leadership / Product,Strategic partnership
+3,Affinity,Relationship intelligence for deal teams; CapitalCompass adds diligence workflow after sourcing,Product / Partnerships,Partnership
+3,Salesforce Financial Services / Slack,Workflow layer for financial services; CapitalCompass demonstrates PE-specific vertical app,Corp Dev / Financial Services Product,Partnership/acquisition
+3,Microsoft for Startups / Financial Services,Office-native PE workflow aligns with Word/PowerPoint/Excel and Azure deployment,Partnerships,Strategic partnership
+3,Private equity software roll-up,Small SaaS asset with PE workflow focus,Partner / Operating Partner,Asset acquisition
+3,Specialized search fund / micro PE buyer,Can commercialize niche PE software with operator-led sales,Principal,Asset purchase
